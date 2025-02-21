@@ -1,0 +1,64 @@
+[submodule "AI/My AI Projects/AI-Based-Database-Query-Maker"]
+    path = AI/My AI Projects/AI-Based-Database-Query-Maker
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "AI/My AI Projects/AI-Terrain-Generator-Web-App"]
+    path = AI/My AI Projects/AI-Terrain-Generator-Web-App
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "AI/My AI Projects/AI-Texture-Material-Generator-Web-App"]
+    path = AI/My AI Projects/AI-Texture-Material-Generator-Web-App
+    url = https://github.com/flosrv/Mes-Projets.git
+
+
+[submodule "AI/My AI Projects/Database-Chatbot"]
+    path = AI/My AI Projects/Database-Chatbot
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "BBC-Learning-Sheet"]
+    path = BBC-Learning-Sheet
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Data-Pipeline-for-Game-Abilities-From-Firestore-to-Unity-WIP"]
+    path = Data-Pipeline-for-Game-Abilities-From-Firestore-to-Unity-WIP
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Game-Market-Data-Code-WIP"]
+    path = Game-Market-Data-Code-WIP
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Gaze-Controlling-Algorithm-wit-OpenCV"]
+    path = Gaze-Controlling-Algorithm-wit-OpenCV
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "IBM Certifications/ibm-Data-Engineering-Data-Science-Certification-Path"]
+    path = IBM Certifications/ibm-Data-Engineering-Data-Science-Certification-Path
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Languages-Sheets"]
+    path = Languages-Sheets
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Reddit-Community-Identifier"]
+    path = Reddit-Community-Identifier
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Small Youtube ML Projects/Loan-status-Prediction"]
+    path = Small Youtube ML Projects/Loan-status-Prediction
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Small Youtube ML Projects/Median-Mean-Mode-Percentile"]
+    path = Small Youtube ML Projects/Median-Mean-Mode-Percentile
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Small Youtube ML Projects/Normal-Distribution-and-Z-Score"]
+    path = Small Youtube ML Projects/Normal-Distribution-and-Z-Score
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Small Youtube ML Projects/Sonar-ML-Project"]
+    path = Small Youtube ML Projects/Sonar-ML-Project
+    url = https://github.com/flosrv/Mes-Projets.git
+
+[submodule "Small Youtube ML Projects/Wine-Quality-ML"]
+    path = Small Youtube ML Projects/Wine-Quality-ML
+    url = https://github.com/flosrv/Mes-Projets.git
