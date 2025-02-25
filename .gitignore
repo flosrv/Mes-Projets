@@ -1,0 +1,11 @@
+# Fichiers sensibles
+*.json
+google_sheets_credentials.json
+
+# Cache et DB
+*.sqlite
+*.ipynb_checkpoints/
+
+# Fichiers temporaires
+__pycache__/
+*.pyc
