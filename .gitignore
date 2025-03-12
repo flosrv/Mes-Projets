@@ -9,3 +9,4 @@ google_sheets_credentials.json
 # Fichiers temporaires
 __pycache__/
 *.pyc
+Credentials/
