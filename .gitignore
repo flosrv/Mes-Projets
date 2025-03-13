@@ -10,3 +10,4 @@ google_sheets_credentials.json
 __pycache__/
 *.pyc
 Credentials/
+.vs/
