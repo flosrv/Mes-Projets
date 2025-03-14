@@ -1,0 +1,4 @@
+Please use this link to sign up for a trial account: 
+https://signup.snowflake.com/?trial=student&cloud=aws&region=us-west-2&utm_source=handsonessentials&utm_campaign=uni-dww#
+
+The link above will ensure that you use the right settings as well as giving you 120 days instead of the standard 30 days. 
