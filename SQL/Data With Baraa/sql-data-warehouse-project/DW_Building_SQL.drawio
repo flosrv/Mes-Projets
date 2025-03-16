@@ -91,6 +91,9 @@
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-38" value="" style="sketch=0;html=1;aspect=fixed;strokeColor=none;shadow=0;fillColor=#3B8DF1;verticalAlign=top;labelPosition=center;verticalLabelPosition=bottom;shape=mxgraph.gcp2.big_query" vertex="1" parent="1">
           <mxGeometry x="837.52" y="280" width="51.48" height="52" as="geometry" />
         </mxCell>
+        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-39" value="" style="verticalLabelPosition=bottom;aspect=fixed;html=1;shape=mxgraph.salesforce.analytics;" vertex="1" parent="1">
+          <mxGeometry x="820" y="178" width="60" height="58.8" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
