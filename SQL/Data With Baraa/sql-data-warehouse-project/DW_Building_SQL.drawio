@@ -76,11 +76,8 @@
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-31" value="" style="shape=singleArrow;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;" vertex="1" parent="1">
           <mxGeometry x="536" y="212" width="60" height="18" as="geometry" />
         </mxCell>
-        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-40" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="-Gvv7bg2ypOTsdOj3XeG-32" target="-Gvv7bg2ypOTsdOj3XeG-30">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-32" value="&lt;b&gt;Object&lt;/b&gt;&lt;div&gt;&lt;b&gt;Type :&lt;/b&gt; CSV&lt;br&gt;&lt;br&gt;&lt;b&gt;Load :&lt;/b&gt;&lt;br&gt;Full Load &lt;br&gt;(Trunc &amp;amp; Insert)&lt;br&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;No Transformation&lt;br&gt;&lt;/b&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;Data Model :&lt;br&gt;&lt;/b&gt;None, (as-is)&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
-          <mxGeometry x="205.5" y="260" width="90" height="140.5" as="geometry" />
+          <mxGeometry x="205.5" y="262" width="90" height="140.5" as="geometry" />
         </mxCell>
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-34" value="&lt;b&gt;Object&amp;nbsp;&lt;/b&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&lt;b&gt;Type :&lt;/b&gt; &lt;br&gt;Tables&lt;/span&gt;&lt;div&gt;&lt;br&gt;&lt;b&gt;Load :&lt;/b&gt;&lt;/div&gt;&lt;div&gt;Batch Processing&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Full Load&lt;/span&gt;&lt;br&gt;(Trunc &amp;amp; Insert)&lt;br&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Transformations :&lt;/div&gt;&lt;div&gt;&lt;ul&gt;&lt;li&gt;&amp;nbsp;Data Cleansing&lt;/li&gt;&lt;li&gt;Data Standardization&lt;/li&gt;&lt;li&gt;Data Normalization&lt;/li&gt;&lt;li&gt;Derived Columns&lt;/li&gt;&lt;li&gt;Data Enrichment&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;Data Model :&lt;br&gt;&lt;/b&gt;None, (as-is)&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
           <mxGeometry x="396" y="305" width="130" height="180" as="geometry" />
@@ -96,6 +93,9 @@
         </mxCell>
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-39" value="Tableau" style="verticalLabelPosition=bottom;aspect=fixed;html=1;shape=mxgraph.salesforce.analytics;" vertex="1" parent="1">
           <mxGeometry x="829" y="192" width="53.06" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-41" value="&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Machine Learning&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;fillColor=#FF6A00;strokeColor=none;shape=mxgraph.alibaba_cloud.machine_learning;" vertex="1" parent="1">
+          <mxGeometry x="827" y="394" width="49.8" height="50.099999999999994" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
