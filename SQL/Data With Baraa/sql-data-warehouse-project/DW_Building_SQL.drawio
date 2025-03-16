@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36" version="26.1.1">
   <diagram name="Page-1" id="km5Bu-YFPCU-qMcmRtrV">
-    <mxGraphModel dx="1030" dy="571" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="704" dy="504" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -85,14 +85,14 @@
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-36" value="Object&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;Type : Views&lt;/span&gt;&lt;div&gt;&lt;br&gt;No Load&amp;nbsp;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;&lt;b&gt;Transformations :&lt;/b&gt;&lt;/div&gt;&lt;div&gt;&lt;ul&gt;&lt;li&gt;&amp;nbsp;Data Cleansing&lt;/li&gt;&lt;li&gt;Data Standardization&lt;/li&gt;&lt;li&gt;Data Normalization&lt;/li&gt;&lt;li&gt;Derived Columns&lt;/li&gt;&lt;li&gt;Data Enrichment&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Data Model :&lt;br&gt;None, (as-is)&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
           <mxGeometry x="602.5" y="270" width="130" height="180" as="geometry" />
         </mxCell>
-        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-37" value="" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/power_platform/PowerBI.svg;" vertex="1" parent="1">
+        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-37" value="PowerBI" style="image;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/azure2/power_platform/PowerBI.svg;" vertex="1" parent="1">
           <mxGeometry x="829" y="75" width="51" height="68" as="geometry" />
         </mxCell>
-        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-38" value="" style="sketch=0;html=1;aspect=fixed;strokeColor=none;shadow=0;fillColor=#3B8DF1;verticalAlign=top;labelPosition=center;verticalLabelPosition=bottom;shape=mxgraph.gcp2.big_query" vertex="1" parent="1">
-          <mxGeometry x="837.52" y="280" width="51.48" height="52" as="geometry" />
+        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-38" value="Ad-Hoc Queries&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="sketch=0;html=1;aspect=fixed;strokeColor=none;shadow=0;fillColor=#3B8DF1;verticalAlign=top;labelPosition=center;verticalLabelPosition=bottom;shape=mxgraph.gcp2.big_query" vertex="1" parent="1">
+          <mxGeometry x="830.5799999999999" y="296" width="51.48" height="52" as="geometry" />
         </mxCell>
-        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-39" value="" style="verticalLabelPosition=bottom;aspect=fixed;html=1;shape=mxgraph.salesforce.analytics;" vertex="1" parent="1">
-          <mxGeometry x="820" y="178" width="60" height="58.8" as="geometry" />
+        <mxCell id="-Gvv7bg2ypOTsdOj3XeG-39" value="Tableau" style="verticalLabelPosition=bottom;aspect=fixed;html=1;shape=mxgraph.salesforce.analytics;" vertex="1" parent="1">
+          <mxGeometry x="829" y="192" width="53.06" height="52" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
