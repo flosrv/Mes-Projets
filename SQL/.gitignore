@@ -1,0 +1,9 @@
+*.log
+*.tmp
+*.db
+.DS_Store
+*.mp4
+*.pdf
+*.json
+*.zip
+*.exe
