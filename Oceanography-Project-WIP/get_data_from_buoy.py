@@ -1,12 +1,66 @@
 from functions import *
-import pandas as pd
-from ndbc_api import NdbcApi
-from siphon.simplewebservice.ndbc import NDBC
+from imports import *
 
-api = NdbcApi()
+path_postgresql_creds = r"C:\Users\f.gionnane\Documents\Data Engineering\Credentials\postgresql_creds.json"
+with open(path_postgresql_creds, 'r') as file:
+    content = json.load(file)
+    user = content["user"]
+    password = content["password"]
+    host = content["host"]
+    port = content["port"]
 
-# get all stations and some metadata as a Pandas DataFrame
-stations_df = api.stations()
+db = "MyProjects"
+schema = "End_To_End_Oceanography_ML"
+
+# Créer l'engine PostgreSQL
+engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
+conn = engine.connect()
+
+
+lat_SM = "11.24N"
+lon_SM = "74.21W"
+
+nearest = api.nearest_station(lat_SM,lon_SM)
+
+buoy_near_SM = api.station(station_id=nearest, as_df=False)
+
+Buoy_Location = buoy_near_SM['Location']
+lat_buoy = float(Buoy_Location.split(' ')[0])  # Convertir en float
+lon_buoy = float(Buoy_Location.split(' ')[2])  # Convertir en float
+
+lat_buoy = round(lat_buoy, 2)  # Arrondir à 2 décimales
+lon_buoy = round(lon_buoy, 2)
+
+
+# Extraction du nom de la station et de la zone
+station_name = buoy_near_SM['Name'].split('-')[0].strip()  # Utilisez buoy_near_SM['Name']
+station_zone = buoy_near_SM['Name'].split('-')[1].strip()
+
+df_marine = NDBC.realtime_observations(nearest)
+
+bronze_marine_table_name = f"Bronze_marine_data_{station_name.replace(' ', '_')}_{station_zone.replace(' ', '_')}_{lat_buoy}_{lon_buoy}"
+bronze_marine_table_name = bronze_marine_table_name.replace('.', '-')
+
+load_data_in_table(db=db, schema=schema, table_name=bronze_marine_table_name, df=df_marine,conn=conn,key_column='time')
+
+coordinates = [lat_buoy, lon_buoy]
+df_meteo = meteo_api_request(coordinates=coordinates)
+
+# Création du nom de la table
+bronze_meteo_data_table_name = f"bronze_meteo_data_{station_name.replace(' ', '_')}_{station_zone.replace(' ', '_')}_{lat_buoy}_{lon_buoy}"
+bronze_meteo_data_table_name = bronze_meteo_data_table_name.replace('.', '-')
+load_data_in_table(db=db, schema=schema, table_name=bronze_meteo_data_table_name, df=df_marine,conn=conn,key_column='time')
+
+
+
+
+
+
+
+
+
+
+
 
 lat_SM = "11.24N"
 lon_SM = "74.21W"
@@ -32,7 +86,7 @@ table_name = f"{station_name.replace(' ', '_')}_{station_zone.replace(' ', '_')}
 # Affichage des résultats
 print(f'{lat_buoy}, {lon_buoy}, {station_name}, \ntable name : {table_name}')
 
-lat_buoy = round(lat_buoy,2)  # Arrondir à 3 décimales (ou plus si besoin)
+lat_buoy = round(lat_buoy,2)
 lon_buoy = round(lon_buoy, 2)
 
 df_marine = NDBC.realtime_observations(nearest)
@@ -83,9 +137,24 @@ df_merged = add_daytime_and_month_column(df_merged,'Datetime')
 df_merged['Wind Speed (km/h)'] = (df_merged['Wind Speed (km/h)_x']+ df_merged['Wind Speed (km/h)_y'])/2
 df_merged = drop_columns_if_exist(df_merged, ['Wind Speed (km/h)_x', 'Wind Speed (km/h)_y', 'Wind Gusts (km/h)'])
 
+from sqlalchemy import create_engine, text
+import json
 
+# Charger les informations de connexion PostgreSQL
+path_postgresql_creds = r"C:\Users\f.gionnane\Documents\Data Engineering\Credentials\postgresql_creds.json"
+with open(path_postgresql_creds, 'r') as file:
+    content = json.load(file)
+    user = content["user"]
+    password = content["password"]
+    host = content["host"]
+    port = content["port"]
 
+db = "MyProjects"
+schema = "End_To_End_Oceanography_ML"
 
+# Créer l'engine PostgreSQL
+engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
+conn = engine.connect()
 
-
-
+# Connexion à la base de données
+load_data_in_table(conn, db, schema, table_name, df = df_merged, key_column='Datetime')

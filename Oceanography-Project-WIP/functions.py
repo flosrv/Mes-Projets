@@ -1,3 +1,33 @@
+from imports import *
+
+path_postgresql_creds = r"C:\Users\f.gionnane\Documents\Data Engineering\Credentials\postgresql_creds.json"
+with open(path_postgresql_creds, 'r') as file:
+    content = json.load(file)
+    user = content["user"]
+    password = content["password"]
+    host = content["host"]
+    port = content["port"]
+
+db = "MyProjects"
+schema = "End_To_End_Oceanography_ML"
+
+# Créer l'engine PostgreSQL
+engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
+conn = engine.connect()
+
+def fetch_table_data(conn, schema, table_name):
+    """
+    Récupère toutes les données d'une table PostgreSQL et les charge dans un DataFrame Pandas.
+
+    :param conn: Connexion SQLAlchemy active à la base de données PostgreSQL.
+    :param schema: Nom du schéma contenant la table.
+    :param table_name: Nom de la table à récupérer.
+    :return: DataFrame contenant les données de la table.
+    """
+    query = text(f'SELECT * FROM "{schema}"."{table_name}"')
+    df = pd.read_sql(query, conn)
+    return df
+
 def drop_columns_if_exist(df, columns_to_drop):
     existing_columns = []
     for col in columns_to_drop:
@@ -7,6 +37,39 @@ def drop_columns_if_exist(df, columns_to_drop):
         else: 
             print(f"Colonne '{col}' Non Trouvée")
     return df.drop(columns=existing_columns)
+
+def create_schema_and_table(conn, schema, table_name, col):
+    # Vérifier si le schéma existe, sinon le créer
+    result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
+    if not result.fetchone():
+        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
+        print(f'Schema "{schema}" created.')
+    else:
+        print(f'Schema "{schema}" already exists.')
+
+    # Vérifier si la table existe, sinon la créer
+    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
+    table_exists = result.fetchone()[0]
+
+    if not table_exists:
+        print(f"Table '{table_name}' does not exist. Creating...")
+
+        # Définir un type de colonne par défaut (par exemple, 'VARCHAR')
+        columns_definition = ', '.join([f'"{col_name}" VARCHAR' for col_name in col])
+
+        # Créer la requête SQL pour créer la table avec les colonnes spécifiées
+        create_table_query = f"""
+        CREATE TABLE IF NOT EXISTS \"{schema}\".\"{table_name}\" (
+            id SERIAL PRIMARY KEY,
+            {columns_definition}
+        );
+        """
+        conn.execute(text(create_table_query))  # Exécution directe de la requête
+        conn.commit()  # S'assurer que la transaction est validée
+        print(f"Table '{table_name}' created in schema '{schema}'.")
+
+    else:
+        print(f"Table '{table_name}' already exists.")
 
 def add_daytime_and_month_column(df, time_column='Datetime'):
     """
@@ -85,6 +148,9 @@ def process_and_resample(df, column_name, resample_interval='h'):
         df.rename(columns={column_name: 'Datetime'}, inplace=True)
         df['Datetime'] = pd.to_datetime(df['Datetime'], errors='raise')
 
+        # Définir la colonne 'Datetime' comme index
+        df.set_index('Datetime', inplace=True)
+
         # Valider l'intervalle de resampling
         valid_intervals = ['h', 'd', 'm', 'w', 'M', 'Y']
         if resample_interval not in valid_intervals:
@@ -99,7 +165,10 @@ def process_and_resample(df, column_name, resample_interval='h'):
 
         # Afficher les dates min et max
         print(f"Plage de dates après resampling ({resample_interval}): \nMin: {min_date}\nMax: {max_date}  ")
-        
+
+        # Réinitialiser l'index et remettre la colonne 'Datetime' comme colonne normale
+        df_resampled.reset_index(inplace=True)
+
         # Retourner la DataFrame résultante
         return df_resampled
     
@@ -296,24 +365,16 @@ def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'
 
             return pd.DataFrame(daily_data)
 
-# Fonction pour se connecter à PostgreSQL via psycopg2 pour la gestion de la DB
-def connect_psycopg2(dbname, user, password, host="localhost", port="5432"):
-    """Établit la connexion à PostgreSQL avec psycopg2 pour la base de données spécifiée."""
-    try:
-        conn = psycopg2.connect(
-            dbname=dbname, user=user, password=password, host=host, port=port
-        )
-        print(f"Connexion réussie à la base {dbname}.")
-        return conn
-    except Exception as e:
-        print(f"Erreur de connexion : {e}")
-        return None
-
+def connect_postgresql(user: str, password : str, host =host, port=port):
+    # Créer l'engine PostgreSQL
+    engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
+    conn = engine.connect()
+    return conn
 # Fonction pour créer une base de données si elle n'existe pas
 def create_database(dbname, user, password, host, port):
     """Crée une base de données si elle n'existe pas déjà."""
     # Se connecter à la base 'postgres' pour créer d'autres DB
-    conn = connect_psycopg2(user=user, password=password, host =host, port=port)
+    conn = connect_postgresql(user=user, password=password, host =host, port=port)
     if conn is None:
         return  # Si la connexion échoue, on arrête la fonction
 
@@ -336,25 +397,88 @@ def create_database(dbname, user, password, host, port):
     cur.close()
     conn.close()
 
-# Fonction pour se connecter à une base spécifique via SQLAlchemy
-def connect_postgresql(dbname, user, password, host, port):
-    """Se connecte à la base Postgresql via SQLAlchemy."""
-    db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
-    try:
-        engine = create_engine(db_url)
-        conn = engine.connect()
-        print(f"Connexion réussie à la base {dbname} via SQLAlchemy.")
-        return conn
-    except Exception as e:
-        print(f"Erreur de connexion avec SQLAlchemy : {e}")
-        return None
+def load_data_in_table(conn, schema, table_name, df, key_column):
+    # Vérifier si le schéma existe, sinon le créer
+    result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
+    if not result.fetchone():
+        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
+        print(f'Schema "{schema}" created.')
+    else:
+        print(f'Schema "{schema}" already exists.')
 
-# Fonction pour créer un schéma dans la base
-def create_schema(conn, schema_name):
-    """Crée un schéma dans la base si ce n'est pas déjà fait."""
-    if conn is not None:
-        try:
-            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
-            print(f"✅ Schéma '{schema_name}' créé.")
-        except Exception as e:
-            print(f"Erreur lors de la création du schéma : {e}")
+    # Vérifier si la table existe
+    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
+    table_exists = result.fetchone()[0]
+
+    if not table_exists:
+        print(f"Table '{table_name}' does not exist. Creating...")
+        # Générer le schéma SQL en fonction des colonnes du DataFrame
+        columns_sql = ", ".join([f'"{col}" TEXT' for col in df.columns])  # Supposition : types TEXT par défaut
+        create_table_query = f"""
+        CREATE TABLE \"{schema}\".\"{table_name}\" (
+            id SERIAL PRIMARY KEY,
+            {columns_sql}
+        );
+        """
+        conn.execute(text(create_table_query))
+        conn.commit()
+        print(f"Table '{table_name}' created in schema '{schema}'.")
+
+        # Insérer les données du DataFrame
+        df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+        print("Data inserted successfully.")
+
+    else:
+        print(f"Table '{table_name}' already exists.")
+
+        # Vérifier si la table est vide
+        result = conn.execute(text(f"SELECT COUNT(*) FROM \"{schema}\".\"{table_name}\""))
+        row_count = result.fetchone()[0]
+
+        if row_count == 0:
+            print("Table is empty, inserting data...")
+            df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+            print("Data inserted successfully.")
+        else:
+            print("Table is not empty, avoiding duplicates...")
+
+            # Récupérer les valeurs existantes de la colonne de référence
+            existing_values = pd.read_sql(f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"', conn)
+            existing_values_set = set(existing_values[key_column])
+
+            # Filtrer les nouvelles données pour éviter les doublons
+            new_data = df[~df[key_column].isin(existing_values_set)]
+
+            if not new_data.empty:
+                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+                print("New data inserted successfully.")
+            else:
+                print("No new data to insert.")
+
+def get_station_metadata(station_id):
+    return api.station(station_id=station_id)
+
+def parse_buoy_json(buoy_data):
+    # Vérifier que 'Location' et 'Name' existent dans les données
+    if 'Location' not in buoy_data or 'Name' not in buoy_data:
+        raise ValueError("Les clés 'Location' et 'Name' doivent être présentes dans les données.")
+
+    # Extraction des coordonnées géographiques
+    Buoy_Location = buoy_data['Location']
+    try:
+        lat_buoy = round(float(Buoy_Location.split(' ')[0]), 2)
+        lon_buoy = round(float(Buoy_Location.split(' ')[2]), 2)
+    except IndexError:
+        raise ValueError(f"Le format de 'Location' est incorrect: {Buoy_Location}")
+    
+    # Extraction des informations de la station
+    station_name = buoy_data['Name'].split('-')[0].strip()
+    station_zone = buoy_data['Name'].split('-')[1].strip()
+    station_id = buoy_data['Name'].split(' ')[1].strip()
+
+    # Définition de marine_data_table_name à partir du nom de la station
+    marine_data_table_name = f"marine_data_{station_name}_{station_zone}_{lat_buoy}_{lon_buoy}"
+ 
+    marine_data_table_name = marine_data_table_name.replace('.', '-').replace(' ', '_')
+
+    return lat_buoy, lon_buoy, station_name, station_id, station_zone, marine_data_table_name
