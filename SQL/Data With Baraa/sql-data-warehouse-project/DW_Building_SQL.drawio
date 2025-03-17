@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36" version="26.1.1">
   <diagram name="Page-1" id="km5Bu-YFPCU-qMcmRtrV">
-    <mxGraphModel dx="1030" dy="571" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="534" dy="552" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -53,7 +53,7 @@
           <mxGeometry x="581" y="50" width="171" height="547" as="geometry" />
         </mxCell>
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-15" value="Bronze" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="160" y="52" width="180" height="47" as="geometry" />
+          <mxGeometry x="160" y="51" width="180" height="47" as="geometry" />
         </mxCell>
         <mxCell id="-Gvv7bg2ypOTsdOj3XeG-16" value="&lt;span style=&quot;background-color: rgb(170, 170, 170);&quot;&gt;Silver&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#B0B0B0;fillColor=#A6A6A6;" vertex="1" parent="1">
           <mxGeometry x="380" y="52" width="170" height="47" as="geometry" />
