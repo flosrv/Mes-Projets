@@ -1,18 +1,18 @@
-﻿<?xml version="1.0"?>
+<?xml version="1.0"?>
 <DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
   DTS:refId="Package"
-  DTS:CreationDate="3/17/2025 8:47:46 PM"
+  DTS:CreationDate="3/17/2025 9:20:21 PM"
   DTS:CreationName="Microsoft.Package"
   DTS:CreatorComputerName="LAP23028"
   DTS:CreatorName="TECHNOFUTURTIC\f.gionnane"
-  DTS:DTSID="{15C9FFBB-C352-4B5A-8B50-69B42A280B19}"
+  DTS:DTSID="{B29A97D3-EB85-4380-881C-2C5E69B55F14}"
   DTS:ExecutableType="Microsoft.Package"
   DTS:LastModifiedProductVersion="16.0.5685.0"
   DTS:LocaleID="1033"
   DTS:ObjectName="run_python_script"
   DTS:PackageType="5"
-  DTS:VersionBuild="2"
-  DTS:VersionGUID="{16DA1D62-F594-47D3-ADCD-92ECABA239E2}">
+  DTS:VersionBuild="5"
+  DTS:VersionGUID="{40924464-F5C8-4A30-B31C-D458AB42A14E}">
   <DTS:Property
     DTS:Name="PackageFormatVersion">8</DTS:Property>
   <DTS:Variables />
@@ -21,7 +21,7 @@
       DTS:refId="Package\Tâche d'exécution de processus"
       DTS:CreationName="Microsoft.ExecuteProcess"
       DTS:Description="Tâche d'exécution de processus"
-      DTS:DTSID="{D85C8046-7F70-4F73-AE96-25FCEE92BD24}"
+      DTS:DTSID="{3E146EDF-8098-4B90-9531-E78B849DC271}"
       DTS:ExecutableType="Microsoft.ExecuteProcess"
       DTS:LocaleID="-1"
       DTS:ObjectName="Tâche d'exécution de processus"
@@ -31,8 +31,8 @@
       <DTS:ObjectData>
         <ExecuteProcessData
           Executable="C:\Program Files\Python313\python.exe"
-          Arguments="C:\Users\f.gionnane\Documents\Data Engineering\SSIS\Random Learning\random_script.py"
-          WorkingDirectory="C:\Users\f.gionnane\Documents\Data Engineering\SSIS\Random Learning\" />
+          Arguments="random_script.py"
+          WorkingDirectory="C:\Users\f.gionnane\Documents\Data Engineering\SSIS\SSIS_Learning" />
       </DTS:ObjectData>
     </DTS:Executable>
   </DTS:Executables>
@@ -51,7 +51,7 @@
         <NodeLayout
           Size="227.2,41.6"
           Id="Package\Tâche d'exécution de processus"
-          TopLeft="99.999994536241,133.466665738556" />
+          TopLeft="117.499993580083,220.999998463194" />
       </GraphLayout>
     </LayoutInfo>
   </Package>

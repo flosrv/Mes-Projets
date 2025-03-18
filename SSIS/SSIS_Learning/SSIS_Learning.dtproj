@@ -14,26 +14,46 @@
     <Manifest>
       <SSIS:Project SSIS:ProtectionLevel="EncryptSensitiveWithUserKey" xmlns:SSIS="www.microsoft.com/SqlServer/SSIS">
         <SSIS:Properties>
-          <SSIS:Property SSIS:Name="ID">{e6afad55-1f88-43fc-b956-6831d043e08a}</SSIS:Property>
+          <SSIS:Property SSIS:Name="ID">{f228210b-8d95-40a4-aba5-3c5a3a406cea}</SSIS:Property>
           <SSIS:Property SSIS:Name="Name">SSIS_Learning</SSIS:Property>
           <SSIS:Property SSIS:Name="VersionMajor">1</SSIS:Property>
           <SSIS:Property SSIS:Name="VersionMinor">0</SSIS:Property>
           <SSIS:Property SSIS:Name="VersionBuild">0</SSIS:Property>
           <SSIS:Property SSIS:Name="VersionComments">
           </SSIS:Property>
-          <SSIS:Property SSIS:Name="CreationDate">2025-03-17T17:55:11.2629323+01:00</SSIS:Property>
+          <SSIS:Property SSIS:Name="CreationDate">2025-03-17T21:20:18.7968043+01:00</SSIS:Property>
           <SSIS:Property SSIS:Name="CreatorName">TECHNOFUTURTIC\f.gionnane</SSIS:Property>
-          <SSIS:Property SSIS:Name="CreatorComputerName">E6K-VDI1604</SSIS:Property>
+          <SSIS:Property SSIS:Name="CreatorComputerName">LAP23028</SSIS:Property>
           <SSIS:Property SSIS:Name="Description">
           </SSIS:Property>
-          <SSIS:Property SSIS:Name="PasswordVerifier" SSIS:Sensitive="1">AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAlcjr/tabR0KJc9DgRux3UgAAAAACAAAAAAADZgAAwAAAABAAAAAuDuvN/a4mlP5vFYKkzDLKAAAAAASAAACgAAAAEAAAACtjvt3OVR3hlSMYp4WYVKaIAAAAP12J2EwAV9H6n82zP+cFLw6ILOj/J5zTuBNh3Q42NjXfX5jBRZV7NTMreCXEIJdOl5zyGysJqcA2KTYweoAAAtUOphjlk+pZJ27OVgmWMOFAvc79LDDwTv+6vs8Is5JQzXP52HDgkexTXRr12scmWXR0vlttNa0zkzlilzNU26jksOTqVHJozxQAAAAi+Hs7Ev7bmDQK/uveMVrjldQ0Dg==</SSIS:Property>
+          <SSIS:Property SSIS:Name="PasswordVerifier" SSIS:Sensitive="1">AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAQ7avOddUIkewng8CHBnQtAAAAAACAAAAAAADZgAAwAAAABAAAABkzgxRVyvOLIv89iqW95SsAAAAAASAAACgAAAAEAAAAP+afA6uisG6k3UlBuK2GAWIAAAAmIlzi1IRtefAT8HuTfRLqTANp0oDfpPxQHERJsfT2JbDEOTETRPjprGOBllbSMMhWw46mwM4dx6fNdobVVgNhPH4NWqa0wQNESfWO/hXCV3sUaY3tkdVt7c2SHfpY6tK5jP8KoYNcGMyYts+eOnrEyig9Wk1AZ0d1tnU4FAXbnbdZ7keoemA3xQAAADpCqFRnCzhXSlhHPDsnn+A3jFQnA==</SSIS:Property>
           <SSIS:Property SSIS:Name="FormatVersion">1</SSIS:Property>
         </SSIS:Properties>
-        <SSIS:Packages />
+        <SSIS:Packages>
+          <SSIS:Package SSIS:Name="run_python_script.dtsx" SSIS:EntryPoint="1" />
+        </SSIS:Packages>
         <SSIS:ConnectionManagers />
         <SSIS:DeploymentInfo>
           <SSIS:ProjectConnectionParameters />
-          <SSIS:PackageInfo />
+          <SSIS:PackageInfo>
+            <SSIS:PackageMetaData SSIS:Name="run_python_script.dtsx">
+              <SSIS:Properties>
+                <SSIS:Property SSIS:Name="ID">{B29A97D3-EB85-4380-881C-2C5E69B55F14}</SSIS:Property>
+                <SSIS:Property SSIS:Name="Name">run_python_script</SSIS:Property>
+                <SSIS:Property SSIS:Name="VersionMajor">1</SSIS:Property>
+                <SSIS:Property SSIS:Name="VersionMinor">0</SSIS:Property>
+                <SSIS:Property SSIS:Name="VersionBuild">2</SSIS:Property>
+                <SSIS:Property SSIS:Name="VersionComments">
+                </SSIS:Property>
+                <SSIS:Property SSIS:Name="VersionGUID">{13C11833-D39D-491A-8EF1-BAE5EA72E682}</SSIS:Property>
+                <SSIS:Property SSIS:Name="PackageFormatVersion">8</SSIS:Property>
+                <SSIS:Property SSIS:Name="Description">
+                </SSIS:Property>
+                <SSIS:Property SSIS:Name="ProtectionLevel">1</SSIS:Property>
+              </SSIS:Properties>
+              <SSIS:Parameters />
+            </SSIS:PackageMetaData>
+          </SSIS:PackageInfo>
         </SSIS:DeploymentInfo>
       </SSIS:Project>
     </Manifest>
@@ -56,7 +76,13 @@
         <LinkedAzureSSISIR />
         <LinkedAzureStorage />
         <RemoteExecutionFolder />
-        <ParameterConfigurationValues />
+        <ParameterConfigurationValues>
+          <ConfigurationSetting>
+            <Id>LastModifiedTime</Id>
+            <Name>LastModifiedTime</Name>
+            <Value xsi:type="xsd:dateTime">2025-03-17T20:29:15.4862424Z</Value>
+          </ConfigurationSetting>
+        </ParameterConfigurationValues>
       </Options>
     </Configuration>
   </Configurations>
