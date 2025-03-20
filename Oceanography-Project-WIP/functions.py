@@ -39,9 +39,7 @@ def fetch_table_data(conn, schema, table_name, as_df=False):
             row_dict = row.to_dict()  # Convertir chaque ligne en dictionnaire
             result_dict[idx] = row_dict  # Ajouter chaque ligne comme une entrée dans le dictionnaire
         return result_dict
-
-    
-       
+      
 def drop_columns_if_exist(df, columns_to_drop):
     existing_columns = []
     for col in columns_to_drop:
@@ -78,9 +76,12 @@ def create_schema_and_table(conn, schema, table_name, col):
             {columns_definition}
         );
         """
-        conn.execute(text(create_table_query))  # Exécution directe de la requête
-        conn.commit()  # S'assurer que la transaction est validée
-        print(f"Table '{table_name}' created in schema '{schema}'.")
+        try:
+            conn.execute(text(create_table_query))  # Exécution directe de la requête
+            conn.commit()  # S'assurer que la transaction est validée
+            print(f"Table '{table_name}' created in schema '{schema}'.")
+        except Exception as e:
+            print(f"Error while creating table '{table_name}' in schema '{schema}': {e}")
 
     else:
         print(f"Table '{table_name}' already exists.")
@@ -408,64 +409,6 @@ def create_database(dbname, user, password, host, port):
     cur.close()
     conn.close()
 
-def load_data_in_table(conn, schema, table_name, df, key_column):
-    # Vérifier si le schéma existe, sinon le créer
-    result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
-    if not result.fetchone():
-        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
-        print(f'\nSchema "{schema}" created.')
-    else:
-        print(f'\nSchema "{schema}" already exists.')
-
-    # Vérifier si la table existe
-    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
-    table_exists = result.fetchone()[0]
-
-    if not table_exists:
-        print(f"Table '{table_name}' does not exist. Creating...")
-        # Générer le schéma SQL en fonction des colonnes du DataFrame
-        columns_sql = ", ".join([f'"{col}" TEXT' for col in df.columns])  # Supposition : types TEXT par défaut
-        create_table_query = f"""
-        CREATE TABLE \"{schema}\".\"{table_name}\" (
-            id SERIAL PRIMARY KEY,
-            {columns_sql}
-        );
-        """
-        conn.execute(text(create_table_query))
-        conn.commit()
-        print(f"Table '{table_name}' created in schema '{schema}'.")
-
-        # Insérer les données du DataFrame
-        df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-        print("Data inserted successfully.\n")
-
-    else:
-        print(f"Table '{table_name}' already exists.")
-
-        # Vérifier si la table est vide
-        result = conn.execute(text(f"SELECT COUNT(*) FROM \"{schema}\".\"{table_name}\""))
-        row_count = result.fetchone()[0]
-
-        if row_count == 0:
-            print("Table is empty, inserting data...")
-            df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-            print("Data inserted successfully.")
-        else:
-            print("Table is not empty, avoiding duplicates...")
-
-            # Récupérer les valeurs existantes de la colonne de référence
-            existing_values = pd.read_sql(f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"', conn)
-            existing_values_set = set(existing_values[key_column])
-
-            # Filtrer les nouvelles données pour éviter les doublons
-            new_data = df[~df[key_column].isin(existing_values_set)]
-
-            if not new_data.empty:
-                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-                print("New data inserted successfully.")
-            else:
-                print("No new data to insert.")
-
 def get_station_metadata(station_id):
     return api.station(station_id=station_id)
 
@@ -497,40 +440,31 @@ def print_with_flush(message):
     sys.stdout.flush()  # Force l'affichage immédiat
 
 def parse_buoy_json(buoy_metadata):
+    # Vérifier la présence des clés requises
+    if 'Name' not in buoy_metadata or 'Location' not in buoy_metadata:
+        raise ValueError("Les clés 'Name' et 'Location' doivent être présentes dans les données.")
 
-    # Vérifier que 'Name' et 'Location' existent dans les données
-    if 'Name' not in buoy_metadata:
-        raise ValueError("La clé 'Name' doit être présente dans les données.")
-    if 'Location' not in buoy_metadata:
-        raise ValueError("La clé 'Location' doit être présente dans les données.")
+    Name = buoy_metadata['Name']
+
+    # Trouver tout ce qui vient après le premier tiret
+    name_parts = Name.split(' - ', 2)
     
-    # Extraction des informations de la station
-    station_name = buoy_metadata['Name'].split('-')[0].strip().lower()
-    station_zone = buoy_metadata['Name'].split('-')[1].strip().lower()
-    station_id = buoy_metadata['Name'].split(' ')[1].strip()
-    
+    station_zone = name_parts[1].strip().lower()
+
+    station_id = Name.split(' ')[1]
     # Extraction des coordonnées depuis "Location"
-    location = buoy_metadata["Location"]
-    location_parts = location.split(' ')
-    lat_str = location_parts[0]
-    lat_dir = location_parts[1]
-    lon_str = location_parts[2]
-    lon_dir = location_parts[3]
-    
-    # Convertir en float et ajuster les signes en fonction de la direction N/S et E/W
-    lat_buoy = float(lat_str) if lat_dir == 'N' else -float(lat_str)
-    lon_buoy = float(lon_str) if lon_dir == 'E' else -float(lon_str)
+    location_parts = buoy_metadata["Location"].split()
+    if len(location_parts) < 4:
+        raise ValueError("Format de 'Location' invalide")
 
-    # Définition de marine_data_table_name en minuscule
+    lat_buoy = f"{float(location_parts[0]):.2f}{location_parts[1]}"
+    lon_buoy = f"{float(location_parts[2]):.2f}{location_parts[3]}"
+
+    # Formatage du nom de la table avec des underscores pour remplacer les points
     table_name = f"station_{station_id}_{station_zone}_{lat_buoy}_{lon_buoy}"
+    marine_data_table_name = re.sub(r'[^a-zA-Z0-9_-]', '', table_name.replace('.', '_').replace(' ', '_')).lower()
 
-    # Correction du nom de la table (remplacement de '.' par '-', espaces par '_', suppression des caractères non alphanumériques)
-    marine_data_table_name = table_name.replace('.', '-').replace(' ', '_')
-
-    # Remplacer les caractères non-alphanumériques autres que _ et -, puis forcer la minuscule
-    marine_data_table_name = re.sub(r'[^a-zA-Z0-9_-]', '', marine_data_table_name).lower()
-
-    return station_name, station_id, station_zone, lat_buoy, lon_buoy, marine_data_table_name
+    return station_id, station_zone, lat_buoy, lon_buoy, marine_data_table_name
 
 def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     for station_id, tables in table_dict.items():
@@ -588,3 +522,103 @@ def auto_convert(df):
                 pass
     
     return df
+
+def convert_coordinates(lat, lon):
+    # Conversion de la latitude
+    lat_value = float(lat[:-1])  # On enlève la lettre 'n' ou 's' et on garde la valeur numérique
+    if lon[-1].lower() == 's':  # Si la latitude est dans l'hémisphère sud
+        lat_value = -lat_value
+
+    # Conversion de la longitude
+    lon_value = float(lon[:-1])  # On enlève la lettre 'e' ou 'w' et on garde la valeur numérique
+    if lon[-1].lower() == 'w':  # Si la longitude est dans l'hémisphère ouest
+        lon_value = -lon_value
+
+    return round(lat_value, 2), round(lon_value, 2)
+
+def load_data_in_table(conn, schema, table_name, df, key_column):
+    # Vérifier si le schéma existe, sinon le créer
+    try:
+        result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
+        if not result.fetchone():
+            try:
+                conn.execute(text(f"CREATE SCHEMA \"{schema}\""))
+                print(f'\nSchema "{schema}" created.')
+            except Exception as e:
+                print(f"Error creating schema: {e}")
+        else:
+            print(f'\nSchema "{schema}" already exists.')
+    except Exception as e:
+        print(f"Error checking schema: {e}")
+
+    # Vérifier si la table existe
+    try:
+        result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
+        table_exists = result.fetchone()[0]
+    except Exception as e:
+        print(f"Error checking table existence: {e}")
+        table_exists = False  # Considérer que la table n'existe pas si une erreur se produit
+
+    if not table_exists:
+        print(f"Table '{table_name}' does not exist. Creating...")
+        try:
+            # Générer le schéma SQL en fonction des colonnes du DataFrame
+            columns_sql = ", ".join([f'"{col}" TEXT' for col in df.columns])  # Supposition : types TEXT par défaut
+            create_table_query = f"""
+            CREATE TABLE \"{schema}\".\"{table_name}\" (
+                id SERIAL PRIMARY KEY,
+                {columns_sql}
+            );
+            """
+            conn.execute(text(create_table_query))
+            conn.commit()  # Commit explicite
+            print(f"Table '{table_name}' created in schema '{schema}'.")
+        except Exception as e:
+            print(f"Error creating table: {e}")
+
+        # Insérer les données du DataFrame
+        try:
+            df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+            print("Data inserted successfully.\n")
+        except Exception as e:
+            print(f"Error inserting data: {e}")
+    else:
+        print(f"Table '{table_name}' already exists.")
+
+        # Vérifier si la table est vide
+        try:
+            result = conn.execute(text(f"SELECT COUNT(*) FROM \"{schema}\".\"{table_name}\""))
+            row_count = result.fetchone()[0]
+        except Exception as e:
+            print(f"Error checking row count: {e}")
+            row_count = 0  # Par défaut, considérer que la table est vide en cas d'erreur
+
+        if row_count == 0:
+            print("Table is empty, inserting data...")
+            try:
+                df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+                print("Data inserted successfully.")
+            except Exception as e:
+                print(f"Error inserting data: {e}")
+        else:
+            print("Table is not empty, avoiding duplicates...")
+
+            # Récupérer les valeurs existantes de la colonne de référence
+            try:
+                existing_values = pd.read_sql(f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"', conn)
+                existing_values_set = set(existing_values[key_column])
+            except Exception as e:
+                print(f"Error retrieving existing values: {e}")
+                existing_values_set = set()
+
+            # Filtrer les nouvelles données pour éviter les doublons
+            new_data = df[~df[key_column].isin(existing_values_set)]
+
+            if not new_data.empty:
+                try:
+                    new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+                    print("New data inserted successfully.")
+                except Exception as e:
+                    print(f"Error inserting new data: {e}")
+            else:
+                print("No new data to insert.")
