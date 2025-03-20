@@ -1,4 +1,5 @@
 from imports import *
+import warnings
 
 path_postgresql_creds = r"C:\Users\f.gionnane\Documents\Data Engineering\Credentials\postgresql_creds.json"
 with open(path_postgresql_creds, 'r') as file:
@@ -15,19 +16,32 @@ schema = "End_To_End_Oceanography_ML"
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
 conn = engine.connect()
 
-def fetch_table_data(conn, schema, table_name):
+def fetch_table_data(conn, schema, table_name, as_df=False):
     """
-    Récupère toutes les données d'une table PostgreSQL et les charge dans un DataFrame Pandas.
+    Récupère toutes les données d'une table PostgreSQL et les charge dans un DataFrame Pandas ou sous forme de JSON.
 
     :param conn: Connexion SQLAlchemy active à la base de données PostgreSQL.
     :param schema: Nom du schéma contenant la table.
     :param table_name: Nom de la table à récupérer.
-    :return: DataFrame contenant les données de la table.
+    :param as_df: Si True, retourne un DataFrame Pandas, sinon retourne les données en JSON.
+    :return: DataFrame ou JSON contenant les données de la table.
     """
     query = text(f'SELECT * FROM "{schema}"."{table_name}"')
     df = pd.read_sql(query, conn)
-    return df
+    df = df.reset_index(drop=True)
 
+
+    if as_df:
+        return df
+    else:
+        result_dict = {}
+        for idx, row in df.iterrows():
+            row_dict = row.to_dict()  # Convertir chaque ligne en dictionnaire
+            result_dict[idx] = row_dict  # Ajouter chaque ligne comme une entrée dans le dictionnaire
+        return result_dict
+
+    
+       
 def drop_columns_if_exist(df, columns_to_drop):
     existing_columns = []
     for col in columns_to_drop:
@@ -162,9 +176,6 @@ def process_and_resample(df, column_name, resample_interval='h'):
 
         # Obtenir les dates min et max directement depuis l'index
         min_date, max_date = df_resampled.index.min(), df_resampled.index.max()
-
-        # Afficher les dates min et max
-        print(f"Plage de dates après resampling ({resample_interval}): \nMin: {min_date}\nMax: {max_date}  ")
 
         # Réinitialiser l'index et remettre la colonne 'Datetime' comme colonne normale
         df_resampled.reset_index(inplace=True)
@@ -402,9 +413,9 @@ def load_data_in_table(conn, schema, table_name, df, key_column):
     result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
     if not result.fetchone():
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
-        print(f'Schema "{schema}" created.')
+        print(f'\nSchema "{schema}" created.')
     else:
-        print(f'Schema "{schema}" already exists.')
+        print(f'\nSchema "{schema}" already exists.')
 
     # Vérifier si la table existe
     result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
@@ -426,7 +437,7 @@ def load_data_in_table(conn, schema, table_name, df, key_column):
 
         # Insérer les données du DataFrame
         df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-        print("Data inserted successfully.")
+        print("Data inserted successfully.\n")
 
     else:
         print(f"Table '{table_name}' already exists.")
@@ -458,27 +469,122 @@ def load_data_in_table(conn, schema, table_name, df, key_column):
 def get_station_metadata(station_id):
     return api.station(station_id=station_id)
 
-def parse_buoy_json(buoy_data):
-    # Vérifier que 'Location' et 'Name' existent dans les données
-    if 'Location' not in buoy_data or 'Name' not in buoy_data:
-        raise ValueError("Les clés 'Location' et 'Name' doivent être présentes dans les données.")
+def extract_lat_lon_from_station_list(location):
 
-    # Extraction des coordonnées géographiques
-    Buoy_Location = buoy_data['Location']
-    try:
-        lat_buoy = round(float(Buoy_Location.split(' ')[0]), 2)
-        lon_buoy = round(float(Buoy_Location.split(' ')[2]), 2)
-    except IndexError:
-        raise ValueError(f"Le format de 'Location' est incorrect: {Buoy_Location}")
+    # Expression régulière pour capturer la latitude et la longitude
+    lat_match = re.search(r'([+-]?\d+\.\d+|\d+)([NS])', location)
+    lon_match = re.search(r'([+-]?\d+\.\d+|\d+)([EW])', location)
+    
+    if lat_match and lon_match:
+        # Extraction des valeurs
+        lat = float(lat_match.group(1))
+        lon = float(lon_match.group(1))
+        
+        # Inverser la direction de la latitude et longitude si nécessaire
+        if lat_match.group(2) == 'S':  # Si la latitude est au Sud
+            lat = -lat
+        if lon_match.group(2) == 'W':  # Si la longitude est à l'Ouest
+            lon = -lon
+        
+        lat = round(lat, 2)
+        lon = round(lon, 2)
+        return lat, lon
+    return None, None
+
+def print_with_flush(message):
+
+    sys.stdout.write(f'\r{message}  ')  # \r permet de revenir au début de la ligne
+    sys.stdout.flush()  # Force l'affichage immédiat
+
+def parse_buoy_json(buoy_metadata):
+
+    # Vérifier que 'Name' et 'Location' existent dans les données
+    if 'Name' not in buoy_metadata:
+        raise ValueError("La clé 'Name' doit être présente dans les données.")
+    if 'Location' not in buoy_metadata:
+        raise ValueError("La clé 'Location' doit être présente dans les données.")
     
     # Extraction des informations de la station
-    station_name = buoy_data['Name'].split('-')[0].strip()
-    station_zone = buoy_data['Name'].split('-')[1].strip()
-    station_id = buoy_data['Name'].split(' ')[1].strip()
+    station_name = buoy_metadata['Name'].split('-')[0].strip().lower()
+    station_zone = buoy_metadata['Name'].split('-')[1].strip().lower()
+    station_id = buoy_metadata['Name'].split(' ')[1].strip()
+    
+    # Extraction des coordonnées depuis "Location"
+    location = buoy_metadata["Location"]
+    location_parts = location.split(' ')
+    lat_str = location_parts[0]
+    lat_dir = location_parts[1]
+    lon_str = location_parts[2]
+    lon_dir = location_parts[3]
+    
+    # Convertir en float et ajuster les signes en fonction de la direction N/S et E/W
+    lat_buoy = float(lat_str) if lat_dir == 'N' else -float(lat_str)
+    lon_buoy = float(lon_str) if lon_dir == 'E' else -float(lon_str)
 
-    # Définition de marine_data_table_name à partir du nom de la station
-    marine_data_table_name = f"marine_data_{station_name}_{station_zone}_{lat_buoy}_{lon_buoy}"
- 
-    marine_data_table_name = marine_data_table_name.replace('.', '-').replace(' ', '_')
+    # Définition de marine_data_table_name en minuscule
+    table_name = f"station_{station_id}_{station_zone}_{lat_buoy}_{lon_buoy}"
 
-    return lat_buoy, lon_buoy, station_name, station_id, station_zone, marine_data_table_name
+    # Correction du nom de la table (remplacement de '.' par '-', espaces par '_', suppression des caractères non alphanumériques)
+    marine_data_table_name = table_name.replace('.', '-').replace(' ', '_')
+
+    # Remplacer les caractères non-alphanumériques autres que _ et -, puis forcer la minuscule
+    marine_data_table_name = re.sub(r'[^a-zA-Z0-9_-]', '', marine_data_table_name).lower()
+
+    return station_name, station_id, station_zone, lat_buoy, lon_buoy, marine_data_table_name
+
+def fetch_and_add_data(table_dict, conn, schema, as_df=False):
+    for station_id, tables in table_dict.items():
+        # Vérifie que 'tables' est un dictionnaire
+        if isinstance(tables, dict):
+            bronze_marine_table = tables.get("bronze marine table name")
+            bronze_meteo_table = tables.get("bronze meteo table name")
+
+            try:
+                if bronze_marine_table:
+                    query = text(f'SELECT * FROM "{schema}"."{bronze_marine_table}"')
+                    marine_data = pd.read_sql(query, conn)
+                    # Conversion en JSON-compatible si nécessaire
+                    if not as_df:
+                        tables["silver marine data"] = marine_data.to_dict(orient='records')  # convert to dict
+                    else:
+                        tables["silver marine data"] = marine_data  # keep as DataFrame if needed
+
+                if bronze_meteo_table:
+                    query = text(f'SELECT * FROM "{schema}"."{bronze_meteo_table}"')
+                    meteo_data = pd.read_sql(query, conn)
+                    # Conversion en JSON-compatible si nécessaire
+                    if not as_df:
+                        tables["silver meteo data"] = meteo_data.to_dict(orient='records')  # convert to dict
+                    else:
+                        tables["silver meteo data"] = meteo_data  # keep as DataFrame if needed
+
+            except Exception as e:
+                print(f"Erreur pendant l'exécution pour station {station_id}: {e}")
+                conn.rollback()  # En cas d'erreur, on annule la transaction en cours
+        else:
+            print(f"Warning: Element {station_id} is not a dictionary {type(station_id)},  skipping.")
+    
+    return table_dict
+
+def auto_convert(df):
+    
+    warnings.filterwarnings("ignore", category=UserWarning)
+
+
+    for col in df.columns:
+
+        if df[col].dtype == 'object' or df[col].dtype == 'str':
+            try:
+
+                df[col] = pd.to_datetime(df[col], errors='raise') 
+            except Exception as e:
+                pass
+
+
+        if df[col].dtype == 'object' or df[col].dtype == 'str':
+            try:
+                df[col] = pd.to_numeric(df[col], errors='raise')  
+            except Exception as e:
+                pass
+    
+    return df
