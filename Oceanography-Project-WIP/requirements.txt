@@ -18,6 +18,9 @@ pyarrow
 ipython
 openmeteo-requests
 psycopg2
+pymongo
+motor
+asyncio
 requests-cache 
 retry-requests
 siphon
