@@ -1,4 +1,5 @@
 from imports import *
+import warnings
 
 path_postgresql_creds = r"C:\Users\f.gionnane\Documents\Data Engineering\Credentials\postgresql_creds.json"
 with open(path_postgresql_creds, 'r') as file:
@@ -15,19 +16,30 @@ schema = "End_To_End_Oceanography_ML"
 engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
 conn = engine.connect()
 
-def fetch_table_data(conn, schema, table_name):
+def fetch_table_data(conn, schema, table_name, as_df=False):
     """
-    Récupère toutes les données d'une table PostgreSQL et les charge dans un DataFrame Pandas.
+    Récupère toutes les données d'une table PostgreSQL et les charge dans un DataFrame Pandas ou sous forme de JSON.
 
     :param conn: Connexion SQLAlchemy active à la base de données PostgreSQL.
     :param schema: Nom du schéma contenant la table.
     :param table_name: Nom de la table à récupérer.
-    :return: DataFrame contenant les données de la table.
+    :param as_df: Si True, retourne un DataFrame Pandas, sinon retourne les données en JSON.
+    :return: DataFrame ou JSON contenant les données de la table.
     """
     query = text(f'SELECT * FROM "{schema}"."{table_name}"')
     df = pd.read_sql(query, conn)
-    return df
+    df = df.reset_index(drop=True)
 
+
+    if as_df:
+        return df
+    else:
+        result_dict = {}
+        for idx, row in df.iterrows():
+            row_dict = row.to_dict()  # Convertir chaque ligne en dictionnaire
+            result_dict[idx] = row_dict  # Ajouter chaque ligne comme une entrée dans le dictionnaire
+        return result_dict
+      
 def drop_columns_if_exist(df, columns_to_drop):
     existing_columns = []
     for col in columns_to_drop:
@@ -64,9 +76,12 @@ def create_schema_and_table(conn, schema, table_name, col):
             {columns_definition}
         );
         """
-        conn.execute(text(create_table_query))  # Exécution directe de la requête
-        conn.commit()  # S'assurer que la transaction est validée
-        print(f"Table '{table_name}' created in schema '{schema}'.")
+        try:
+            conn.execute(text(create_table_query))  # Exécution directe de la requête
+            conn.commit()  # S'assurer que la transaction est validée
+            print(f"Table '{table_name}' created in schema '{schema}'.")
+        except Exception as e:
+            print(f"Error while creating table '{table_name}' in schema '{schema}': {e}")
 
     else:
         print(f"Table '{table_name}' already exists.")
@@ -162,9 +177,6 @@ def process_and_resample(df, column_name, resample_interval='h'):
 
         # Obtenir les dates min et max directement depuis l'index
         min_date, max_date = df_resampled.index.min(), df_resampled.index.max()
-
-        # Afficher les dates min et max
-        print(f"Plage de dates après resampling ({resample_interval}): \nMin: {min_date}\nMax: {max_date}  ")
 
         # Réinitialiser l'index et remettre la colonne 'Datetime' comme colonne normale
         df_resampled.reset_index(inplace=True)
@@ -397,88 +409,216 @@ def create_database(dbname, user, password, host, port):
     cur.close()
     conn.close()
 
+def get_station_metadata(station_id):
+    return api.station(station_id=station_id)
+
+def extract_lat_lon_from_station_list(location):
+
+    # Expression régulière pour capturer la latitude et la longitude
+    lat_match = re.search(r'([+-]?\d+\.\d+|\d+)([NS])', location)
+    lon_match = re.search(r'([+-]?\d+\.\d+|\d+)([EW])', location)
+    
+    if lat_match and lon_match:
+        # Extraction des valeurs
+        lat = float(lat_match.group(1))
+        lon = float(lon_match.group(1))
+        
+        # Inverser la direction de la latitude et longitude si nécessaire
+        if lat_match.group(2) == 'S':  # Si la latitude est au Sud
+            lat = -lat
+        if lon_match.group(2) == 'W':  # Si la longitude est à l'Ouest
+            lon = -lon
+        
+        lat = round(lat, 2)
+        lon = round(lon, 2)
+        return lat, lon
+    return None, None
+
+def print_with_flush(message):
+
+    sys.stdout.write(f'\r{message}  ')  # \r permet de revenir au début de la ligne
+    sys.stdout.flush()  # Force l'affichage immédiat
+
+def parse_buoy_json(buoy_metadata):
+    # Vérifier la présence des clés requises
+    if 'Name' not in buoy_metadata or 'Location' not in buoy_metadata:
+        raise ValueError("Les clés 'Name' et 'Location' doivent être présentes dans les données.")
+
+    Name = buoy_metadata['Name']
+
+    # Trouver tout ce qui vient après le premier tiret
+    name_parts = Name.split(' - ', 2)
+    
+    station_zone = name_parts[1].strip().lower()
+
+    station_id = Name.split(' ')[1]
+    # Extraction des coordonnées depuis "Location"
+    location_parts = buoy_metadata["Location"].split()
+    if len(location_parts) < 4:
+        raise ValueError("Format de 'Location' invalide")
+
+    lat_buoy = f"{float(location_parts[0]):.2f}{location_parts[1]}"
+    lon_buoy = f"{float(location_parts[2]):.2f}{location_parts[3]}"
+
+    # Formatage du nom de la table avec des underscores pour remplacer les points
+    table_name = f"station_{station_id}_{station_zone}_{lat_buoy}_{lon_buoy}"
+    marine_data_table_name = re.sub(r'[^a-zA-Z0-9_-]', '', table_name.replace('.', '_').replace(' ', '_')).lower()
+
+    return station_id, station_zone, lat_buoy, lon_buoy, marine_data_table_name
+
+def fetch_and_add_data(table_dict, conn, schema, as_df=False):
+    for station_id, tables in table_dict.items():
+        # Vérifie que 'tables' est un dictionnaire
+        if isinstance(tables, dict):
+            bronze_marine_table = tables.get("bronze marine table name")
+            bronze_meteo_table = tables.get("bronze meteo table name")
+
+            try:
+                if bronze_marine_table:
+                    query = text(f'SELECT * FROM "{schema}"."{bronze_marine_table}"')
+                    marine_data = pd.read_sql(query, conn)
+                    # Conversion en JSON-compatible si nécessaire
+                    if not as_df:
+                        tables["silver marine data"] = marine_data.to_dict(orient='records')  # convert to dict
+                    else:
+                        tables["silver marine data"] = marine_data  # keep as DataFrame if needed
+
+                if bronze_meteo_table:
+                    query = text(f'SELECT * FROM "{schema}"."{bronze_meteo_table}"')
+                    meteo_data = pd.read_sql(query, conn)
+                    # Conversion en JSON-compatible si nécessaire
+                    if not as_df:
+                        tables["silver meteo data"] = meteo_data.to_dict(orient='records')  # convert to dict
+                    else:
+                        tables["silver meteo data"] = meteo_data  # keep as DataFrame if needed
+
+            except Exception as e:
+                print(f"Erreur pendant l'exécution pour station {station_id}: {e}")
+                conn.rollback()  # En cas d'erreur, on annule la transaction en cours
+        else:
+            print(f"Warning: Element {station_id} is not a dictionary {type(station_id)},  skipping.")
+    
+    return table_dict
+
+def auto_convert(df):
+    
+    warnings.filterwarnings("ignore", category=UserWarning)
+
+
+    for col in df.columns:
+
+        if df[col].dtype == 'object' or df[col].dtype == 'str':
+            try:
+
+                df[col] = pd.to_datetime(df[col], errors='raise') 
+            except Exception as e:
+                pass
+
+
+        if df[col].dtype == 'object' or df[col].dtype == 'str':
+            try:
+                df[col] = pd.to_numeric(df[col], errors='raise')  
+            except Exception as e:
+                pass
+    
+    return df
+
+def convert_coordinates(lat, lon):
+    # Conversion de la latitude
+    lat_value = float(lat[:-1])  # On enlève la lettre 'n' ou 's' et on garde la valeur numérique
+    if lon[-1].lower() == 's':  # Si la latitude est dans l'hémisphère sud
+        lat_value = -lat_value
+
+    # Conversion de la longitude
+    lon_value = float(lon[:-1])  # On enlève la lettre 'e' ou 'w' et on garde la valeur numérique
+    if lon[-1].lower() == 'w':  # Si la longitude est dans l'hémisphère ouest
+        lon_value = -lon_value
+
+    return round(lat_value, 2), round(lon_value, 2)
+
 def load_data_in_table(conn, schema, table_name, df, key_column):
     # Vérifier si le schéma existe, sinon le créer
-    result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
-    if not result.fetchone():
-        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
-        print(f'Schema "{schema}" created.')
-    else:
-        print(f'Schema "{schema}" already exists.')
+    try:
+        result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
+        if not result.fetchone():
+            try:
+                conn.execute(text(f"CREATE SCHEMA \"{schema}\""))
+                print(f'\nSchema "{schema}" created.')
+            except Exception as e:
+                print(f"Error creating schema: {e}")
+        else:
+            print(f'\nSchema "{schema}" already exists.')
+    except Exception as e:
+        print(f"Error checking schema: {e}")
 
     # Vérifier si la table existe
-    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
-    table_exists = result.fetchone()[0]
+    try:
+        result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
+        table_exists = result.fetchone()[0]
+    except Exception as e:
+        print(f"Error checking table existence: {e}")
+        table_exists = False  # Considérer que la table n'existe pas si une erreur se produit
 
     if not table_exists:
         print(f"Table '{table_name}' does not exist. Creating...")
-        # Générer le schéma SQL en fonction des colonnes du DataFrame
-        columns_sql = ", ".join([f'"{col}" TEXT' for col in df.columns])  # Supposition : types TEXT par défaut
-        create_table_query = f"""
-        CREATE TABLE \"{schema}\".\"{table_name}\" (
-            id SERIAL PRIMARY KEY,
-            {columns_sql}
-        );
-        """
-        conn.execute(text(create_table_query))
-        conn.commit()
-        print(f"Table '{table_name}' created in schema '{schema}'.")
+        try:
+            # Générer le schéma SQL en fonction des colonnes du DataFrame
+            columns_sql = ", ".join([f'"{col}" TEXT' for col in df.columns])  # Supposition : types TEXT par défaut
+            create_table_query = f"""
+            CREATE TABLE \"{schema}\".\"{table_name}\" (
+                id SERIAL PRIMARY KEY,
+                {columns_sql}
+            );
+            """
+            conn.execute(text(create_table_query))
+            conn.commit()  # Commit explicite
+            print(f"Table '{table_name}' created in schema '{schema}'.")
+        except Exception as e:
+            print(f"Error creating table: {e}")
 
         # Insérer les données du DataFrame
-        df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-        print("Data inserted successfully.")
-
+        try:
+            df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+            print("Data inserted successfully.\n")
+        except Exception as e:
+            print(f"Error inserting data: {e}")
     else:
         print(f"Table '{table_name}' already exists.")
 
         # Vérifier si la table est vide
-        result = conn.execute(text(f"SELECT COUNT(*) FROM \"{schema}\".\"{table_name}\""))
-        row_count = result.fetchone()[0]
+        try:
+            result = conn.execute(text(f"SELECT COUNT(*) FROM \"{schema}\".\"{table_name}\""))
+            row_count = result.fetchone()[0]
+        except Exception as e:
+            print(f"Error checking row count: {e}")
+            row_count = 0  # Par défaut, considérer que la table est vide en cas d'erreur
 
         if row_count == 0:
             print("Table is empty, inserting data...")
-            df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-            print("Data inserted successfully.")
+            try:
+                df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+                print("Data inserted successfully.")
+            except Exception as e:
+                print(f"Error inserting data: {e}")
         else:
             print("Table is not empty, avoiding duplicates...")
 
             # Récupérer les valeurs existantes de la colonne de référence
-            existing_values = pd.read_sql(f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"', conn)
-            existing_values_set = set(existing_values[key_column])
+            try:
+                existing_values = pd.read_sql(f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"', conn)
+                existing_values_set = set(existing_values[key_column])
+            except Exception as e:
+                print(f"Error retrieving existing values: {e}")
+                existing_values_set = set()
 
             # Filtrer les nouvelles données pour éviter les doublons
             new_data = df[~df[key_column].isin(existing_values_set)]
 
             if not new_data.empty:
-                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-                print("New data inserted successfully.")
+                try:
+                    new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
+                    print("New data inserted successfully.")
+                except Exception as e:
+                    print(f"Error inserting new data: {e}")
             else:
                 print("No new data to insert.")
-
-def get_station_metadata(station_id):
-    return api.station(station_id=station_id)
-
-def parse_buoy_json(buoy_data):
-    # Vérifier que 'Location' et 'Name' existent dans les données
-    if 'Location' not in buoy_data or 'Name' not in buoy_data:
-        raise ValueError("Les clés 'Location' et 'Name' doivent être présentes dans les données.")
-
-    # Extraction des coordonnées géographiques
-    Buoy_Location = buoy_data['Location']
-    try:
-        lat_buoy = round(float(Buoy_Location.split(' ')[0]), 2)
-        lon_buoy = round(float(Buoy_Location.split(' ')[2]), 2)
-    except IndexError:
-        raise ValueError(f"Le format de 'Location' est incorrect: {Buoy_Location}")
-    
-    # Extraction des informations de la station
-    station_name = buoy_data['Name'].split('-')[0].strip()
-    station_zone = buoy_data['Name'].split('-')[1].strip()
-    station_id = buoy_data['Name'].split(' ')[1].strip()
-
-    # Définition de marine_data_table_name à partir du nom de la station
-    marine_data_table_name = f"marine_data_{station_name}_{station_zone}_{lat_buoy}_{lon_buoy}"
- 
-    marine_data_table_name = marine_data_table_name.replace('.', '-').replace(' ', '_')
-
-    return lat_buoy, lon_buoy, station_name, station_id, station_zone, marine_data_table_name
