@@ -181,9 +181,8 @@ def process_and_resample(df, column_name, resample_interval='h'):
         return df
 #
 def handle_null_values(df):
-    # Calculate the percentage of missing values
-    missing_percent = round((df.isnull().sum() / len(df)) * 100, 2)
-    missing_percent_str = missing_percent.astype(str) + '%'
+    # Calculate the percentage of missing values for each column
+    missing_percent = (df.isnull().sum() / len(df)) * 100
 
     # Lists to group columns by action type
     dropped_columns_100 = []
@@ -193,40 +192,37 @@ def handle_null_values(df):
 
     # Handle missing values
     for column in df.columns:
-        null_percentage = missing_percent[column]
+        null_percentage = missing_percent[column]  # Now it's a single value
 
-        if null_percentage == 100:
-            # If 100% of the values are missing, drop the column
-            dropped_columns_100.append(column)
-            df = df.drop(column, axis=1)
-        elif null_percentage > 50:
-            # If more than 50% of the values are missing, drop the column
-            dropped_columns_above_50.append(column)
-            df = df.drop(column, axis=1)
-        elif null_percentage > 0:
-            # If less than 50% of the values are missing, impute with the median
-            if df[column].dtype in ['float64', 'int64']:
-                median_value = df[column].median()
-                df[column] = df[column].fillna(median_value)
-                imputed_columns.append(column)
-            else:
-                # If the column is non-numeric, we skip it
-                skipped_columns.append(column)
+        if isinstance(null_percentage, (int, float)):
+            null_percentage = float(null_percentage)  # Ensure it's a float
+            
+            if null_percentage == 100:
+                dropped_columns_100.append(column)
+                df = df.drop(columns=[column])
+            elif null_percentage > 50:
+                dropped_columns_above_50.append(column)
+                df = df.drop(columns=[column])
+            elif null_percentage > 0:
+                if df[column].dtype in ['float64', 'int64']:
+                    median_value = df[column].median()
+                    df[column] = df[column].fillna(median_value)
+                    imputed_columns.append(column)
+                else:
+                    skipped_columns.append(column)
 
-    # Printing grouped messages
+    # Print logs
     if dropped_columns_100:
-        print(f"Dropping columns with 100% missing values:\n{', '.join(dropped_columns_100)}")
+        print(f"Dropped columns (100% missing): {', '.join(dropped_columns_100)}")
     if dropped_columns_above_50:
-        print(f"Dropping columns with more than 50% missing values:\n{', '.join(dropped_columns_above_50)}")
+        print(f"Dropped columns (>50% missing): {', '.join(dropped_columns_above_50)}")
     if imputed_columns:
-        print(f"Imputing columns with less than 50% missing values using the median:\n{', '.join(imputed_columns)}")
+        print(f"Imputed columns (<50% missing, median): {', '.join(imputed_columns)}")
     if skipped_columns:
-        print(f"Skipping non-numeric columns with missing values:\n{', '.join(skipped_columns)}")
+        print(f"Skipped non-numeric columns: {', '.join(skipped_columns)}")
 
-    # Return the modified DataFrame
     return df
 
-#
 def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'):
     """
     Fonction pour récupérer les données météo depuis l'API Open-Meteo avec cache et réessayer en cas d'erreur.
@@ -773,6 +769,42 @@ def show_popup(text):
     # Afficher la fenêtre
     root.mainloop()
 
+def rename_column(df, rename_spec):
+
+    # Ensure the input is a DataFrame
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame.")
+    
+    # If the rename_spec is a JSON or dictionary format
+    if isinstance(rename_spec, dict):
+        # Process a single dictionary of column mappings
+        rename_spec = [rename_spec]  # Convert to list of dicts for uniformity
+    
+    # Process each dictionary in the list of rename_spec (if it is a list of dicts)
+    if isinstance(rename_spec, list):
+        for rename_dict in rename_spec:
+            for old_name, new_name in rename_dict.items():
+                if old_name in df.columns:
+                    # Rename the column only if the old name exists in the DataFrame
+                    df = df.rename(columns={old_name: new_name})
+                else:
+                    print(f"⚠️ Column '{old_name}' not found in DataFrame. Skipping renaming.")
+    
+    # Return the modified DataFrame
+    return df
+
+def rename_columns(df, column_mapping):
+  
+    # Filtrer les colonnes existantes dans le DataFrame
+    existing_columns = [col for col in column_mapping.keys() if col in df.columns]
+    
+    # Créer un dictionnaire de renommage basé sur les colonnes existantes seulement
+    valid_rename = {col: column_mapping[col] for col in existing_columns}
+    
+    # Renommer les colonnes
+    df.rename(columns=valid_rename, inplace=True)
+    
+    return df
 
 
 
