@@ -18,7 +18,7 @@ from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 import time
-
+import tkinter as tk
 
 from urllib.parse import quote_plus, unquote
 from IPython.core.display import *
