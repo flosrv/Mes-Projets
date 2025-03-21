@@ -17,9 +17,6 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
-
-
-
 import time
 
 
