@@ -1,20 +1,6 @@
 from imports import *
 import warnings
 
-path_postgresql_creds = r"C:\Users\f.gionnane\Documents\Data Engineering\Credentials\postgresql_creds.json"
-with open(path_postgresql_creds, 'r') as file:
-    content = json.load(file)
-    user = content["user"]
-    password = content["password"]
-    host = content["host"]
-    port = content["port"]
-
-db = "MyProjects"
-schema = "End_To_End_Oceanography_ML"
-
-# Créer l'engine PostgreSQL
-engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
-conn = engine.connect()
 
 def fetch_table_data(conn, schema, table_name, as_df=False):
     """
@@ -377,7 +363,7 @@ def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'
 
             return pd.DataFrame(daily_data)
 
-def connect_postgresql(user: str, password : str, host =host, port=port):
+def connect_postgresql(user: str, password : str, host, port):
     # Créer l'engine PostgreSQL
     engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
     conn = engine.connect()

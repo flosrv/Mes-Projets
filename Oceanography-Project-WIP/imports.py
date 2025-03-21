@@ -1,3 +1,4 @@
+import retry_requests
 from retry_requests import retry
 import requests, pandas as pd
 from datetime import datetime, timedelta, timezone, time
