@@ -446,11 +446,7 @@ def parse_buoy_json(buoy_metadata):
     lat_buoy = f"{float(location_parts[0]):.2f}{location_parts[1]}"
     lon_buoy = f"{float(location_parts[2]):.2f}{location_parts[3]}"
 
-    # Formatage du nom de la table avec des underscores pour remplacer les points
-    table_name = f"station_{station_id}_{station_zone}_{lat_buoy}_{lon_buoy}"
-    marine_data_table_name = re.sub(r'[^a-zA-Z0-9_-]', '', table_name.replace('.', '_').replace(' ', '_')).lower()
-
-    return station_id, station_zone, lat_buoy, lon_buoy, marine_data_table_name
+    return station_id, station_zone, lat_buoy, lon_buoy
 
 def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     for station_id, tables in table_dict.items():
@@ -727,9 +723,15 @@ def count_files_in_directory(output_dir):
     except Exception as e:
         print(f"Erreur dans la fonction count_files_in_directory: {e}")
 
+def show_popup(text):
+    root = tk.Tk()
+    root.title("Notification")
+    label = tk.Label(root, text, padx=20, pady=20)
+    label.pack()
 
-
-
+    # Fermer la fenêtre après 4 secondes
+    root.after(4000, root.destroy)
+    root.mainloop()
 
 
 
