@@ -523,88 +523,228 @@ def convert_coordinates(lat, lon):
     return round(lat_value, 2), round(lon_value, 2)
 
 def load_data_in_table(conn, schema, table_name, df, key_column):
-    # Vérifier si le schéma existe, sinon le créer
+    # Ouvrir une nouvelle transaction
     try:
-        result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
-        if not result.fetchone():
-            try:
-                conn.execute(text(f"CREATE SCHEMA \"{schema}\""))
-                print(f'\nSchema "{schema}" created.')
-            except Exception as e:
-                print(f"Error creating schema: {e}")
-        else:
-            print(f'\nSchema "{schema}" already exists.')
-    except Exception as e:
-        print(f"Error checking schema: {e}")
+        inspector = inspect(conn)
 
-    # Vérifier si la table existe
-    try:
-        result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
-        table_exists = result.fetchone()[0]
-    except Exception as e:
-        print(f"Error checking table existence: {e}")
-        table_exists = False  # Considérer que la table n'existe pas si une erreur se produit
+        # Vérifier et créer le schéma si nécessaire
+        if schema not in inspector.get_schema_names():
+            conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            conn.commit()
+            print(f'Schema "{schema}" created.')
 
-    if not table_exists:
-        print(f"Table '{table_name}' does not exist. Creating...")
-        try:
-            # Générer le schéma SQL en fonction des colonnes du DataFrame
-            columns_sql = ", ".join([f'"{col}" TEXT' for col in df.columns])  # Supposition : types TEXT par défaut
-            create_table_query = f"""
-            CREATE TABLE \"{schema}\".\"{table_name}\" (
+        # Vérifier si la table existe
+        if not inspector.has_table(table_name, schema=schema):
+            print(f"Table '{table_name}' does not exist. Creating...")
+
+            # Définir dynamiquement les types SQL
+            type_mapping = {
+                'int64': 'INTEGER',
+                'float64': 'FLOAT',
+                'object': 'TEXT',
+                'bool': 'BOOLEAN'
+            }
+            columns_sql = ", ".join([f'"{col}" {type_mapping.get(str(df[col].dtype), "TEXT")}' for col in df.columns])
+
+            create_table_query = f'''
+            CREATE TABLE "{schema}"."{table_name}" (
                 id SERIAL PRIMARY KEY,
                 {columns_sql}
-            );
-            """
+            );'''
             conn.execute(text(create_table_query))
-            conn.commit()  # Commit explicite
+            conn.commit()
             print(f"Table '{table_name}' created in schema '{schema}'.")
-        except Exception as e:
-            print(f"Error creating table: {e}")
 
-        # Insérer les données du DataFrame
-        try:
-            df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-            print("Data inserted successfully.\n")
-        except Exception as e:
-            print(f"Error inserting data: {e}")
-    else:
-        print(f"Table '{table_name}' already exists.")
-
-        # Vérifier si la table est vide
-        try:
-            result = conn.execute(text(f"SELECT COUNT(*) FROM \"{schema}\".\"{table_name}\""))
-            row_count = result.fetchone()[0]
-        except Exception as e:
-            print(f"Error checking row count: {e}")
-            row_count = 0  # Par défaut, considérer que la table est vide en cas d'erreur
-
-        if row_count == 0:
-            print("Table is empty, inserting data...")
+        # Vérifier et éviter les doublons
+        existing_values_set = set()
+        if key_column:
             try:
-                df.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-                print("Data inserted successfully.")
-            except Exception as e:
-                print(f"Error inserting data: {e}")
-        else:
-            print("Table is not empty, avoiding duplicates...")
-
-            # Récupérer les valeurs existantes de la colonne de référence
-            try:
-                existing_values = pd.read_sql(f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"', conn)
+                query = f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"'
+                existing_values = pd.read_sql(query, conn)
                 existing_values_set = set(existing_values[key_column])
             except Exception as e:
                 print(f"Error retrieving existing values: {e}")
-                existing_values_set = set()
 
-            # Filtrer les nouvelles données pour éviter les doublons
-            new_data = df[~df[key_column].isin(existing_values_set)]
+        new_data = df if key_column is None else df[~df[key_column].isin(existing_values_set)]
 
-            if not new_data.empty:
+        rows_before_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
+
+        rows_inserted = 0  # Initialiser à 0, afin qu'il y ait toujours une valeur
+        if not new_data.empty:
+            try:
+                # Utiliser bulk insert pour plus de rapidité
+                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False, method='multi')
+
+                # Compter les lignes réellement insérées
+                rows_inserted = len(new_data)
+                print(f"New data inserted successfully!")
+            except Exception as e:
+                print(f"Error inserting new data: {e}\n")
+        else:
+            print("No new data to insert.\n")
+
+        # Compter le nombre de lignes dans la table après l'insertion
+        rows_after_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
+
+        # Affichage des résultats
+        if rows_inserted == 0:
+            print(f"No new data was inserted.")
+        
+        print(f"Rows in table before insertion: {rows_before_insert}")
+        print(f"Rows inserted: {rows_inserted}")
+        print(f"Rows in table after insertion: {rows_after_insert}\n")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        conn.rollback()  # Annuler la transaction en cas d'erreur
+    finally:
+        conn.commit()  # Toujours valider la transaction
+
+def drop_schema_force(conn, schema_name):
+
+    try:
+        # Vérifier si le schéma existe
+        inspector = inspect(conn)
+        schemas = inspector.get_schema_names()
+        
+        if schema_name not in schemas:
+            print(f"Schema '{schema_name}' does not exist.")
+            return
+        
+        # Supprimer toutes les tables et objets du schéma
+        print(f"Dropping all objects in schema '{schema_name}'...")
+        
+        # Obtenir la liste des tables du schéma
+        query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{schema_name}'"
+        tables = pd.read_sql(query, conn)
+        
+        # Gérer les verrous : avant de supprimer, vérifier les processus en attente de verrou
+        print("Checking for existing locks...")
+        query_locks = """
+            SELECT
+                pg_stat_activity.pid,
+                pg_stat_activity.state,
+                pg_locks.mode,
+                pg_class.relname,
+                pg_stat_activity.query
+            FROM
+                pg_stat_activity
+            JOIN
+                pg_locks ON pg_stat_activity.pid = pg_locks.pid
+            JOIN
+                pg_class ON pg_locks.relation = pg_class.oid
+            WHERE
+                pg_stat_activity.state = 'idle in transaction';
+        """
+        locks = pd.read_sql(query_locks, conn)
+        
+        if not locks.empty:
+            print(f"Found active locks:\n{locks}")
+            print("Waiting 5 seconds before continuing...")
+            time.sleep(2)  # Attendre 2 secondes avant de tenter la suppression des tables
+        
+        # Supprimer les tables une par une dans des transactions distinctes
+        for table in tables['table_name']:
+            try:
+                # Commencer une transaction distincte pour chaque table
+                conn.begin()
+                print(f"\nDropping table '{table}'...")
+                conn.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{table}" CASCADE'))
+                conn.commit()
+                print(f"Table '{table}' dropped.")
+                time.sleep(1)  # Délai d'une seconde entre chaque suppression
+            except Exception as e:
+                print(f"Error dropping table '{table}': {e}")
+                conn.rollback()
+        
+        # Supprimer le schéma
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+        conn.commit()
+        print(f"\nSchema '{schema_name}' and all its objects have been dropped.")
+    
+    except Exception as e:
+        print(f"Error dropping schema: {e}")
+
+def list_tables_info(conn, schema):
+    try:
+        # Obtenir une liste des tables dans le schéma
+        inspector = inspect(conn)
+        tables = inspector.get_table_names(schema=schema)
+        
+        if not tables:
+            print(f"Aucune table trouvée dans le schéma '{schema}'.")
+            return
+        
+        print(f"Tables dans le schéma '{schema}':\n")
+        
+        # Parcourir chaque table et obtenir le nombre de lignes
+        for table in tables:
+            query = f"SELECT COUNT(*) FROM \"{schema}\".\"{table}\""
+            row_count = pd.read_sql(query, conn).iloc[0, 0]
+            print(f"Table: {table}\nNombre de lignes: {row_count}")
+    
+    except Exception as e:
+        print(f"Erreur lors de la récupération des informations des tables : {e}")
+
+def count_files_in_directory(output_dir):
+    try:
+        # Vérifier si le dossier existe
+        if not os.path.exists(output_dir):
+            print(f"Le dossier {output_dir} n'existe pas.")
+            return
+        
+        # Liste des fichiers dans le dossier
+        files = [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
+        
+        # Si le dossier est vide
+        if not files:
+            print(f"Aucun fichier trouvé dans le dossier {output_dir}.")
+            return
+        
+        print(f"Nombre de fichiers dans le dossier '{output_dir}': {len(files)}\n")
+        
+        # Analyser chaque fichier
+        for file in files:
+            file_path = os.path.join(output_dir, file)
+            file_name, file_extension = os.path.splitext(file)
+            
+            # Vérifier si c'est un fichier CSV
+            if file_extension.lower() == '.csv':
                 try:
-                    new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False)
-                    print("New data inserted successfully.")
+                    # Lire le fichier CSV avec pandas
+                    df = pd.read_csv(file_path)
+                    num_rows, num_cols = df.shape
+                    
+                    # Afficher les informations sur le fichier
+                    print(f"Nom du fichier: {file_name}")
+                    print(f"Format: {file_extension}")
+                    print(f"Nombre de lignes: {num_rows}, Nombre de colonnes: {num_cols}\n")
                 except Exception as e:
-                    print(f"Error inserting new data: {e}")
+                    print(f"Erreur lors de la lecture du fichier {file}: {e}")
             else:
-                print("No new data to insert.")
+                print(f"Fichier {file} n'est pas un fichier CSV.\n")
+    
+    except Exception as e:
+        print(f"Erreur dans la fonction count_files_in_directory: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
