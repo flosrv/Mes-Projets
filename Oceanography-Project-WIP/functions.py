@@ -181,31 +181,51 @@ def process_and_resample(df, column_name, resample_interval='h'):
         return df
 #
 def handle_null_values(df):
-    # Calcul des pourcentages de valeurs manquantes
+    # Calculate the percentage of missing values
     missing_percent = round((df.isnull().sum() / len(df)) * 100, 2)
     missing_percent_str = missing_percent.astype(str) + '%'
-    
 
-    # Gestion des valeurs manquantes
+    # Lists to group columns by action type
+    dropped_columns_100 = []
+    dropped_columns_above_50 = []
+    imputed_columns = []
+    skipped_columns = []
+
+    # Handle missing values
     for column in df.columns:
         null_percentage = missing_percent[column]
-        
+
         if null_percentage == 100:
-            # Si 100% des valeurs sont manquantes, on supprime la colonne
-            print(f"Supprime la colonne : {column} (100% de valeurs manquantes)")
+            # If 100% of the values are missing, drop the column
+            dropped_columns_100.append(column)
             df = df.drop(column, axis=1)
         elif null_percentage > 50:
-            # Si plus de 50% des valeurs sont manquantes, on supprime la colonne
-            print(f"Supprime la colonne : {column} ({null_percentage}% de valeurs manquantes)")
+            # If more than 50% of the values are missing, drop the column
+            dropped_columns_above_50.append(column)
             df = df.drop(column, axis=1)
         elif null_percentage > 0:
-            # Si moins de 50% des valeurs sont manquantes, on impute avec la médiane
-            print(f"Impute la colonne : {column} avec la médiane ({null_percentage}% de valeurs manquantes)")
-            median_value = df[column].median()
-            df[column] = df[column].fillna(median_value)
-       
-    # Retourner le DataFrame modifié
+            # If less than 50% of the values are missing, impute with the median
+            if df[column].dtype in ['float64', 'int64']:
+                median_value = df[column].median()
+                df[column] = df[column].fillna(median_value)
+                imputed_columns.append(column)
+            else:
+                # If the column is non-numeric, we skip it
+                skipped_columns.append(column)
+
+    # Printing grouped messages
+    if dropped_columns_100:
+        print(f"Dropping columns with 100% missing values:\n{', '.join(dropped_columns_100)}")
+    if dropped_columns_above_50:
+        print(f"Dropping columns with more than 50% missing values:\n{', '.join(dropped_columns_above_50)}")
+    if imputed_columns:
+        print(f"Imputing columns with less than 50% missing values using the median:\n{', '.join(imputed_columns)}")
+    if skipped_columns:
+        print(f"Skipping non-numeric columns with missing values:\n{', '.join(skipped_columns)}")
+
+    # Return the modified DataFrame
     return df
+
 #
 def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'):
     """
@@ -596,8 +616,7 @@ def load_data_in_table(conn, schema, table_name, df, key_column):
     finally:
         conn.commit()  # Toujours valider la transaction
 
-def drop_schema_force(conn, schema_name):
-
+def drop_tables(conn, schema_name, drop_schema=False, table_name_filter=None):
     try:
         # Vérifier si le schéma existe
         inspector = inspect(conn)
@@ -607,12 +626,23 @@ def drop_schema_force(conn, schema_name):
             print(f"Schema '{schema_name}' does not exist.")
             return
         
-        # Supprimer toutes les tables et objets du schéma
-        print(f"Dropping all objects in schema '{schema_name}'...")
-        
         # Obtenir la liste des tables du schéma
+        print(f"Fetching tables from schema '{schema_name}'...")
+        
         query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{schema_name}'"
         tables = pd.read_sql(query, conn)
+        
+        if tables.empty:
+            print(f"No tables found in schema '{schema_name}'.")
+            return
+        
+        # Si un filtre sur les tables est fourni, l'appliquer
+        if table_name_filter:
+            tables = tables[tables['table_name'].str.contains(table_name_filter, case=False, na=False)]
+            if tables.empty:
+                print(f"No tables found matching the filter '{table_name_filter}' in schema '{schema_name}'.")
+                return
+            print(f"Tables matching the filter '{table_name_filter}':\n{tables}")
         
         # Gérer les verrous : avant de supprimer, vérifier les processus en attente de verrou
         print("Checking for existing locks...")
@@ -637,7 +667,7 @@ def drop_schema_force(conn, schema_name):
         if not locks.empty:
             print(f"Found active locks:\n{locks}")
             print("Waiting 5 seconds before continuing...")
-            time.sleep(2)  # Attendre 2 secondes avant de tenter la suppression des tables
+            time.sleep(5)  # Attendre 5 secondes avant de tenter la suppression des tables
         
         # Supprimer les tables une par une dans des transactions distinctes
         for table in tables['table_name']:
@@ -653,13 +683,16 @@ def drop_schema_force(conn, schema_name):
                 print(f"Error dropping table '{table}': {e}")
                 conn.rollback()
         
-        # Supprimer le schéma
-        conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
-        conn.commit()
-        print(f"\nSchema '{schema_name}' and all its objects have been dropped.")
-    
+        # Si l'argument drop_schema est True, supprimer également le schéma
+        if drop_schema:
+            conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+            conn.commit()
+            print(f"\nSchema '{schema_name}' and all its objects have been dropped.")
+        else:
+            print(f"\nTables dropped from schema '{schema_name}', but schema not removed.")
+
     except Exception as e:
-        print(f"Error dropping schema: {e}")
+        print(f"Error dropping tables in schema '{schema_name}': {e}")
 
 def list_tables_info(conn, schema):
     try:
@@ -726,12 +759,20 @@ def count_files_in_directory(output_dir):
 def show_popup(text):
     root = tk.Tk()
     root.title("Notification")
-    label = tk.Label(root, text, padx=20, pady=20)
+    
+    # Empêcher la redimension de la fenêtre
+    root.resizable(False, False)
+
+    # Centrer le texte avec un peu de padding
+    label = tk.Label(root, text=text, padx=20, pady=20, font=("Arial", 12))
     label.pack()
 
     # Fermer la fenêtre après 4 secondes
     root.after(4000, root.destroy)
+    
+    # Afficher la fenêtre
     root.mainloop()
+
 
 
 
