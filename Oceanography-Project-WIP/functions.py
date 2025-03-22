@@ -794,35 +794,21 @@ def rename_columns(df, rename_spec):
     if not isinstance(df, pd.DataFrame):
         raise ValueError("Input must be a pandas DataFrame.")
     
-    # If rename_spec is a dictionary, convert it into a list of dicts for uniform processing
+    # Si rename_spec est un dictionnaire, on le transforme en liste de dictionnaires pour un traitement uniforme
     if isinstance(rename_spec, dict):
-        rename_spec = [rename_spec]  # Convert to list of dicts for uniformity
-
+        rename_spec = [rename_spec]  # Convertir en liste de dictionnaires pour uniformité
+    
     # Process each dictionary in the list of rename_spec
     if isinstance(rename_spec, list):
         for rename_dict in rename_spec:
-            # Filter the columns that exist in both the DataFrame and rename_spec
+            # Filtrer les colonnes qui existent à la fois dans le DataFrame et rename_spec
             existing_columns = {col: rename_dict[col] for col in rename_dict if col in df.columns}
             
-            # Rename the columns only if they exist in the DataFrame
+            # Renommer les colonnes uniquement si elles existent dans le DataFrame
             if existing_columns:
                 df.rename(columns=existing_columns, inplace=True)
             else:
-                print(f"⚠️ No columns to rename from this spec: {rename_dict}")
+                print(f"⚠️ Aucune colonne à renommer pour ce spécification : {rename_dict}")
     
-    # Return the modified DataFrame
+    # Retourner le DataFrame modifié
     return df
-
-def rename_column(df, col_to_rename):
-    try:
-        # Boucle sur chaque clé-valeur dans le dictionnaire pour renommer les colonnes
-        for old_name, new_name in col_to_rename.items():
-            if old_name in df.columns:
-                df.rename(columns={old_name: new_name}, inplace=True)
-            else:
-                print(f"Colonne '{old_name}' non trouvée dans le DataFrame, pas de renommage effectué pour cette colonne.")
-        return df
-    except Exception as e:
-        print(f"Erreur lors du renommage des colonnes : {e}")
-        return df
-
