@@ -13,7 +13,7 @@ def show_first_row(df):
     # Afficher le résultat formaté
     print(formatted_output)
 
-def display_null_counts(df):
+def show_null_counts(df):
     row_count = df.shape[0]
     null_counts = df.isnull().sum()
     
@@ -158,24 +158,6 @@ def add_daytime_and_month_column(df, time_column='Datetime'):
         df['Month'] = time_data.dt.month
     
     return df
-
-def convert_to_datetime(date_value):
-    try:
-        # Si l'entrée est déjà un objet datetime, on le retourne directement
-        if isinstance(date_value, datetime):
-            return date_value
-        
-        # Si l'entrée est un objet pandas.Timestamp, on le convertit en datetime
-        if isinstance(date_value, pd.Timestamp):
-            return date_value.to_pydatetime()
-        
-        # Si l'entrée est une chaîne de caractères, on tente de la convertir en datetime
-        if isinstance(date_value, str):
-            return datetime.fromisoformat(date_value)
-        
-    except ValueError:
-        pass
-        # En cas d'erreur, on retourne None pour éviter de casser le programme
 
 def process_and_resample(df, column_name, resample_interval='h'):
     try:
@@ -820,6 +802,7 @@ def show_popup(text):
     root.mainloop()
 
 def rename_columns(df, rename_spec):
+
     # Ensure the input is a DataFrame
     if not isinstance(df, pd.DataFrame):
         raise ValueError("Input must be a pandas DataFrame.")
@@ -842,3 +825,39 @@ def rename_columns(df, rename_spec):
     
     # Retourner le DataFrame modifié
     return df
+
+def get_day_time(col):
+    # Extraire l'heure et le mois directement de l'objet Timestamp
+    hour = col.hour
+    
+    # Initialiser une variable pour le moment de la journée
+    if 0 <= hour < 6:
+        daytime = 'Night'
+    elif 6 <= hour < 12:
+        daytime = 'Morning'
+    elif 12 <= hour < 18:
+        daytime = 'Afternoon'
+    elif 18 <= hour < 24:
+        daytime = 'Evening'
+    
+    # Extraire le mois directement
+    month = col.month
+    
+    # Retourner un tuple avec le moment de la journée et le mois
+    return daytime, month
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
