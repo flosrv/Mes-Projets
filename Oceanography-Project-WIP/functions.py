@@ -521,26 +521,24 @@ def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     return table_dict
 
 def auto_convert(df):
-    
     warnings.filterwarnings("ignore", category=UserWarning)
 
-
     for col in df.columns:
-
+        # Si la colonne est de type 'object' ou 'str', tenter la conversion datetime
         if df[col].dtype == 'object' or df[col].dtype == 'str':
             try:
-
-                df[col] = pd.to_datetime(df[col], errors='raise') 
+                # Utiliser la fonction convert_to_datetime pour convertir les valeurs
+                df[col] = df[col].apply(lambda x: convert_to_datetime(x))
             except Exception as e:
                 pass
 
-
+        # Si la colonne est encore de type 'object' ou 'str', tenter la conversion numérique
         if df[col].dtype == 'object' or df[col].dtype == 'str':
             try:
-                df[col] = pd.to_numeric(df[col], errors='raise')  
+                df[col] = pd.to_numeric(df[col], errors='raise')
             except Exception as e:
                 pass
-    
+
     return df
 
 def convert_coordinates(lat, lon):
