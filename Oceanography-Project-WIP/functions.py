@@ -1,6 +1,18 @@
 from imports import *
 import warnings
 
+def show_first_row(df):
+    # Récupérer la première ligne du DataFrame
+    first_row = df.iloc[0]
+    
+    # Formater l'affichage des valeurs
+    formatted_output = "\n".join(
+        f"{col:<30}{value}" for col, value in first_row.items()
+    )
+    
+    # Afficher le résultat formaté
+    print(formatted_output)
+
 def display_null_counts(df):
     row_count = df.shape[0]
     null_counts = df.isnull().sum()
@@ -521,11 +533,6 @@ def fetch_and_add_data(table_dict, conn, schema, as_df=False):
             print(f"Warning: Element {station_id} is not a dictionary {type(station_id)},  skipping.")
     
     return table_dict
-
-# Fonction de conversion de datetime avec une gestion d'erreur améliorée
-from datetime import datetime
-import pandas as pd
-import warnings
 
 def convert_to_datetime(date_value):
     try:
