@@ -1,6 +1,15 @@
 from imports import *
 import warnings
 
+def display_null_counts(df):
+    row_count = df.shape[0]
+    null_counts = df.isnull().sum()
+    
+    formatted_output = "\n".join(
+        f"{col:<25}{count:<4}/ {row_count}" for col, count in null_counts.items()
+    )
+    
+    print(formatted_output)
 
 def fetch_table_data(conn, schema, table_name, as_df=False):
     """
@@ -138,6 +147,28 @@ def add_daytime_and_month_column(df, time_column='Datetime'):
     
     return df
 
+def convert_to_datetime(date_value):
+    try:
+        # Si l'entrée est déjà un objet datetime, on le retourne directement
+        if isinstance(date_value, datetime):
+            return date_value
+        
+        # Si l'entrée est un objet pandas.Timestamp, on le convertit en datetime
+        if isinstance(date_value, pd.Timestamp):
+            return date_value.to_pydatetime()
+        
+        # Si l'entrée est une chaîne de caractères, on tente de la convertir en datetime
+        if isinstance(date_value, str):
+            return datetime.fromisoformat(date_value)
+        
+        # Si le format n'est pas reconnu, on renvoie une erreur
+        print(f"Format non pris en charge pour : {date_value}")
+        return None
+    except ValueError:
+        # En cas d'erreur, on retourne None pour éviter de casser le programme
+        print(f"Erreur de conversion pour : {date_value}")
+        return None
+
 def process_and_resample(df, column_name, resample_interval='h'):
     try:
         # Vérification si la colonne existe dans le DataFrame
@@ -145,30 +176,21 @@ def process_and_resample(df, column_name, resample_interval='h'):
             print(f"Erreur : La colonne '{column_name}' n'existe pas dans le DataFrame.")
             return df
 
-        # Renommer la colonne spécifiée en 'Datetime' et la convertir en datetime
+        # Appliquer la fonction lambda qui utilise convert_to_datetime pour chaque élément
+        df[column_name] = df[column_name].apply(lambda x: convert_to_datetime(x))
+
+        # Supprimer les lignes où la conversion a échoué (valeurs None)
+        df = df.dropna(subset=[column_name])
+
+        # Filtrer pour garder uniquement les lignes où les minutes et les secondes sont 00
+        df = df[df[column_name].dt.minute == 0]
+        df = df[df[column_name].dt.second == 0]
+
+        # Renommer la colonne spécifiée en 'Datetime' à la fin
         df.rename(columns={column_name: 'Datetime'}, inplace=True)
-        df['Datetime'] = pd.to_datetime(df['Datetime'], errors='raise')
-
-        # Définir la colonne 'Datetime' comme index
-        df.set_index('Datetime', inplace=True)
-
-        # Valider l'intervalle de resampling
-        valid_intervals = ['h', 'd', 'm', 'w', 'M', 'Y']
-        if resample_interval not in valid_intervals:
-            print(f"Erreur : L'intervalle de resampling '{resample_interval}' n'est pas valide. Utilisez l'un des suivants : {', '.join(valid_intervals)}.")
-            return df
-
-        # Resampler selon l'intervalle choisi et prendre la moyenne
-        df_resampled = df.resample(resample_interval).mean().round(2)
-
-        # Obtenir les dates min et max directement depuis l'index
-        min_date, max_date = df_resampled.index.min(), df_resampled.index.max()
-
-        # Réinitialiser l'index et remettre la colonne 'Datetime' comme colonne normale
-        df_resampled.reset_index(inplace=True)
 
         # Retourner la DataFrame résultante
-        return df_resampled
+        return df
     
     except ValueError as e:
         print(f"Erreur de conversion des dates : {e}")
@@ -179,7 +201,7 @@ def process_and_resample(df, column_name, resample_interval='h'):
     except Exception as e:
         print(f"Erreur inattendue : {e}")
         return df
-#
+
 def handle_null_values(df):
     # Calculate the percentage of missing values for each column
     missing_percent = (df.isnull().sum() / len(df)) * 100
@@ -669,20 +691,18 @@ def drop_tables(conn, schema_name, drop_schema=False, table_name_filter=None):
         for table in tables['table_name']:
             try:
                 # Commencer une transaction distincte pour chaque table
-                conn.begin()
                 print(f"\nDropping table '{table}'...")
-                conn.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{table}" CASCADE'))
-                conn.commit()
-                print(f"Table '{table}' dropped.")
-                time.sleep(1)  # Délai d'une seconde entre chaque suppression
+                # Begin a transaction for each table drop
+                with conn.begin():
+                    conn.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{table}" CASCADE'))
+                    print(f"Table '{table}' dropped.")
+                    time.sleep(1)  # Délai d'une seconde entre chaque suppression
             except Exception as e:
                 print(f"Error dropping table '{table}': {e}")
-                conn.rollback()
         
         # Si l'argument drop_schema est True, supprimer également le schéma
         if drop_schema:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
-            conn.commit()
             print(f"\nSchema '{schema_name}' and all its objects have been dropped.")
         else:
             print(f"\nTables dropped from schema '{schema_name}', but schema not removed.")
@@ -769,57 +789,40 @@ def show_popup(text):
     # Afficher la fenêtre
     root.mainloop()
 
-def rename_column(df, rename_spec):
-
+def rename_columns(df, rename_spec):
     # Ensure the input is a DataFrame
     if not isinstance(df, pd.DataFrame):
         raise ValueError("Input must be a pandas DataFrame.")
     
-    # If the rename_spec is a JSON or dictionary format
+    # If rename_spec is a dictionary, convert it into a list of dicts for uniform processing
     if isinstance(rename_spec, dict):
-        # Process a single dictionary of column mappings
         rename_spec = [rename_spec]  # Convert to list of dicts for uniformity
-    
-    # Process each dictionary in the list of rename_spec (if it is a list of dicts)
+
+    # Process each dictionary in the list of rename_spec
     if isinstance(rename_spec, list):
         for rename_dict in rename_spec:
-            for old_name, new_name in rename_dict.items():
-                if old_name in df.columns:
-                    # Rename the column only if the old name exists in the DataFrame
-                    df = df.rename(columns={old_name: new_name})
-                else:
-                    print(f"⚠️ Column '{old_name}' not found in DataFrame. Skipping renaming.")
+            # Filter the columns that exist in both the DataFrame and rename_spec
+            existing_columns = {col: rename_dict[col] for col in rename_dict if col in df.columns}
+            
+            # Rename the columns only if they exist in the DataFrame
+            if existing_columns:
+                df.rename(columns=existing_columns, inplace=True)
+            else:
+                print(f"⚠️ No columns to rename from this spec: {rename_dict}")
     
     # Return the modified DataFrame
     return df
 
-def rename_columns(df, column_mapping):
-  
-    # Filtrer les colonnes existantes dans le DataFrame
-    existing_columns = [col for col in column_mapping.keys() if col in df.columns]
-    
-    # Créer un dictionnaire de renommage basé sur les colonnes existantes seulement
-    valid_rename = {col: column_mapping[col] for col in existing_columns}
-    
-    # Renommer les colonnes
-    df.rename(columns=valid_rename, inplace=True)
-    
-    return df
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def rename_column(df, col_to_rename):
+    try:
+        # Boucle sur chaque clé-valeur dans le dictionnaire pour renommer les colonnes
+        for old_name, new_name in col_to_rename.items():
+            if old_name in df.columns:
+                df.rename(columns={old_name: new_name}, inplace=True)
+            else:
+                print(f"Colonne '{old_name}' non trouvée dans le DataFrame, pas de renommage effectué pour cette colonne.")
+        return df
+    except Exception as e:
+        print(f"Erreur lors du renommage des colonnes : {e}")
+        return df
 
