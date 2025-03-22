@@ -6,7 +6,7 @@ def display_null_counts(df):
     null_counts = df.isnull().sum()
     
     formatted_output = "\n".join(
-        f"{col:<25}{count:<4}/ {row_count}" for col, count in null_counts.items()
+        f"{col:<40}{count:<4}/ {row_count}" for col, count in null_counts.items()
     )
     
     print(formatted_output)
@@ -161,13 +161,9 @@ def convert_to_datetime(date_value):
         if isinstance(date_value, str):
             return datetime.fromisoformat(date_value)
         
-        # Si le format n'est pas reconnu, on renvoie une erreur
-        print(f"Format non pris en charge pour : {date_value}")
-        return None
     except ValueError:
+        pass
         # En cas d'erreur, on retourne None pour éviter de casser le programme
-        print(f"Erreur de conversion pour : {date_value}")
-        return None
 
 def process_and_resample(df, column_name, resample_interval='h'):
     try:
@@ -203,28 +199,34 @@ def process_and_resample(df, column_name, resample_interval='h'):
         return df
 
 def handle_null_values(df):
-    # Calculate the percentage of missing values for each column
+    # Calcul du pourcentage de valeurs manquantes par colonne
     missing_percent = (df.isnull().sum() / len(df)) * 100
 
-    # Lists to group columns by action type
+    # Listes pour regrouper les colonnes selon l'action à prendre
     dropped_columns_100 = []
     dropped_columns_above_50 = []
     imputed_columns = []
     skipped_columns = []
 
-    # Handle missing values
+    # Gestion des valeurs manquantes
     for column in df.columns:
-        null_percentage = missing_percent[column]  # Now it's a single value
+        null_percentage = missing_percent[column]  # Calcul du pourcentage de valeurs manquantes
 
         if isinstance(null_percentage, (int, float)):
-            null_percentage = float(null_percentage)  # Ensure it's a float
-            
+            null_percentage = float(null_percentage)  # Assurez-vous que c'est un float
+
             if null_percentage == 100:
                 dropped_columns_100.append(column)
                 df = df.drop(columns=[column])
             elif null_percentage > 50:
-                dropped_columns_above_50.append(column)
-                df = df.drop(columns=[column])
+                # Si la colonne est numérique, imputer les valeurs manquantes par la médiane
+                if df[column].dtype in ['float64', 'int64']:
+                    median_value = df[column].median()
+                    df[column] = df[column].fillna(median_value)
+                    imputed_columns.append(column)  # Ajout à la liste des colonnes imputées
+                else:
+                    dropped_columns_above_50.append(column)
+                    df = df.drop(columns=[column])  # Si ce n'est pas numérique, supprimer la colonne
             elif null_percentage > 0:
                 if df[column].dtype in ['float64', 'int64']:
                     median_value = df[column].median()
@@ -233,7 +235,7 @@ def handle_null_values(df):
                 else:
                     skipped_columns.append(column)
 
-    # Print logs
+    # Affichage des logs
     if dropped_columns_100:
         print(f"Dropped columns (100% missing): {', '.join(dropped_columns_100)}")
     if dropped_columns_above_50:
@@ -520,24 +522,47 @@ def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     
     return table_dict
 
+# Fonction de conversion de datetime avec une gestion d'erreur améliorée
+from datetime import datetime
+import pandas as pd
+import warnings
+
+def convert_to_datetime(date_value):
+    try:
+        # Si l'entrée est déjà un objet datetime, on le retourne directement
+        if isinstance(date_value, datetime):
+            return date_value
+        
+        # Si l'entrée est un objet pandas.Timestamp, on le convertit en datetime
+        if isinstance(date_value, pd.Timestamp):
+            return date_value.to_pydatetime()
+        
+        # Si l'entrée est une chaîne de caractères, on tente de la convertir en datetime
+        if isinstance(date_value, str):
+            return datetime.fromisoformat(date_value)
+        
+    except ValueError as e:
+        # Si la conversion échoue, on retourne la valeur d'origine (sans la modifier)
+        return date_value  # Retourne la valeur d'origine sans la modifier
+
 def auto_convert(df):
     warnings.filterwarnings("ignore", category=UserWarning)
 
     for col in df.columns:
-        # Si la colonne est de type 'object' ou 'str', tenter la conversion datetime
-        if df[col].dtype == 'object' or df[col].dtype == 'str':
+        # Si la colonne est de type 'object', on tente de la convertir en datetime
+        if df[col].dtype == 'object':
             try:
                 # Utiliser la fonction convert_to_datetime pour convertir les valeurs
                 df[col] = df[col].apply(lambda x: convert_to_datetime(x))
             except Exception as e:
-                pass
+                continue  # Continue même si une erreur survient
 
-        # Si la colonne est encore de type 'object' ou 'str', tenter la conversion numérique
-        if df[col].dtype == 'object' or df[col].dtype == 'str':
-            try:
-                df[col] = pd.to_numeric(df[col], errors='raise')
-            except Exception as e:
-                pass
+        # Ensuite, on tente de convertir les colonnes restantes en numériques
+        try:
+            # Utilisation de 'coerce' pour convertir les erreurs en NaN
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        except Exception as e:
+            continue  # Continue même si une erreur survient
 
     return df
 
