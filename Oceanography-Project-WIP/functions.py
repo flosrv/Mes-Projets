@@ -5,9 +5,9 @@ def show_first_row(df):
     # Récupérer la première ligne du DataFrame
     first_row = df.iloc[0]
     
-    # Formater l'affichage des valeurs
+    # Formater l'affichage des valeurs et des types
     formatted_output = "\n".join(
-        f"{col:<30}{value}" for col, value in first_row.items()
+        f"{col:<30} {value}  ({df[col].dtype})" for col, value in first_row.items()
     )
     
     # Afficher le résultat formaté
