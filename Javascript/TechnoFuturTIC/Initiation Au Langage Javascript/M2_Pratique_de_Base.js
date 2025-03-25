@@ -43,9 +43,3 @@ qu'on souhaite faire passer */
 
 
 // En javascript, l'équivalent de except est catch
-
-// Exo 1:
-
-const message_exo = "Ceci est une constante"
-
-alert(message_exo)
