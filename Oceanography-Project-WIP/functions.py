@@ -533,12 +533,14 @@ def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     
     return table_dict
 
-
-
 def auto_convert(df):
     warnings.filterwarnings("ignore", category=UserWarning)
 
     for col in df.columns:
+        # On vérifie si la colonne est déjà de type datetime ou time, dans ce cas on la laisse inchangée
+        if df[col].dtype in ['datetime64[ns, UTC]', 'datetime64[ns]', 'timedelta64[ns]']:
+            continue
+
         # Si la colonne est de type 'object', on tente de la convertir en datetime
         if df[col].dtype == 'object':
             try:
@@ -551,6 +553,12 @@ def auto_convert(df):
         try:
             # Utilisation de 'coerce' pour convertir les erreurs en NaN
             df[col] = pd.to_numeric(df[col], errors='coerce')
+        except Exception as e:
+            continue  # Continue même si une erreur survient
+
+        try:
+            # Utilisation de 'astype(str)' pour convertir la colonne en string
+            df[col] = df[col].astype(str)
         except Exception as e:
             continue  # Continue même si une erreur survient
 
@@ -802,19 +810,19 @@ def show_popup(text):
     # Afficher la fenêtre
     root.mainloop()
 
-def rename_columns(df, rename_spec):
+def rename_columns(df, columns):
 
     # Ensure the input is a DataFrame
     if not isinstance(df, pd.DataFrame):
         raise ValueError("Input must be a pandas DataFrame.")
     
     # Si rename_spec est un dictionnaire, on le transforme en liste de dictionnaires pour un traitement uniforme
-    if isinstance(rename_spec, dict):
-        rename_spec = [rename_spec]  # Convertir en liste de dictionnaires pour uniformité
+    if isinstance(columns, dict):
+        columns = [columns]  # Convertir en liste de dictionnaires pour uniformité
     
     # Process each dictionary in the list of rename_spec
-    if isinstance(rename_spec, list):
-        for rename_dict in rename_spec:
+    if isinstance(columns, list):
+        for rename_dict in columns:
             # Filtrer les colonnes qui existent à la fois dans le DataFrame et rename_spec
             existing_columns = {col: rename_dict[col] for col in rename_dict if col in df.columns}
             
@@ -847,17 +855,28 @@ def get_day_time(col):
     # Retourner un tuple avec le moment de la journée et le mois
     return daytime, month
 
+def process_datetime_column(df, column):
+  
+    df = df.copy()  # Évite le SettingWithCopyWarning
 
+    # Convertir la colonne en chaîne de caractères au tout début
+    df[column] = df[column].astype(str)
+    print(f"📌 La colonne '{column}' est maintenant convertie en chaîne de caractères.")
 
+    # Essayer de convertir la colonne en datetime en forçant la conversion avec errors='coerce'
+    try:
+        df[column] = pd.to_datetime(df[column], errors='coerce', utc=True)
+        print(f"📌 Conversion réussie de '{column}' en datetime.")
+    except Exception as e:
+        print(f"🚨 ERREUR lors de la conversion de '{column}' : {e}")
+    
+    # Appliquer un arrondi à l'heure
+    df[column] = df[column].dt.floor('H')
 
+    # Renommer la colonne
+    df.rename(columns={column: 'Datetime'}, inplace=True)
 
-
-
-
-
-
-
-
+    return df
 
 
 
