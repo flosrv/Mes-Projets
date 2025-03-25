@@ -2,7 +2,7 @@
 let MonNombre = 42;
 console.log(typeof MonNombre)
 
-let MonText = "Bonjour à Toi Visiteur !"
+let MonText = "Bonjour à Toi l'alien !"
 console.log(MonText)
 
 let monSecondText = 'Bonjour à toi visiteur'

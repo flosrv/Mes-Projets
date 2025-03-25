@@ -159,6 +159,23 @@ def add_daytime_and_month_column(df, time_column='Datetime'):
     
     return df
 
+def convert_to_datetime(date_value):
+    try:
+        # Si l'entrée est déjà un objet datetime, on le retourne directement
+        if isinstance(date_value, datetime):
+            return date_value
+        
+        # Si l'entrée est un objet pandas.Timestamp, on le convertit en datetime
+        if isinstance(date_value, pd.Timestamp):
+            return date_value.to_pydatetime()
+        
+        # Si l'entrée est une chaîne de caractères, on tente de la convertir en datetime
+        if isinstance(date_value, str):
+            return datetime.fromisoformat(date_value)
+        
+    except ValueError as e:
+        # Si la conversion échoue, on retourne la valeur d'origine (sans la modifier)
+        return date_value  # Retourne la valeur d'origine sans la modifier
 def process_and_resample(df, column_name, resample_interval='h'):
     try:
         # Vérification si la colonne existe dans le DataFrame
@@ -516,23 +533,7 @@ def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     
     return table_dict
 
-def convert_to_datetime(date_value):
-    try:
-        # Si l'entrée est déjà un objet datetime, on le retourne directement
-        if isinstance(date_value, datetime):
-            return date_value
-        
-        # Si l'entrée est un objet pandas.Timestamp, on le convertit en datetime
-        if isinstance(date_value, pd.Timestamp):
-            return date_value.to_pydatetime()
-        
-        # Si l'entrée est une chaîne de caractères, on tente de la convertir en datetime
-        if isinstance(date_value, str):
-            return datetime.fromisoformat(date_value)
-        
-    except ValueError as e:
-        # Si la conversion échoue, on retourne la valeur d'origine (sans la modifier)
-        return date_value  # Retourne la valeur d'origine sans la modifier
+
 
 def auto_convert(df):
     warnings.filterwarnings("ignore", category=UserWarning)

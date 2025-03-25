@@ -134,6 +134,7 @@ switch (nombre) {
 }
 
 /// Les tableau /// 
+
 //Création du tableau "monTableau"
 let monTableau = [valeur1, valeur2, valeur3]
 // Mais c'est comme une Liste Python... On va voir
@@ -146,3 +147,85 @@ let noms = ["Alice", "Bob", "Charlie"];
 
 // .length == python len(x)
 console.log(noms.length)
+
+//// PUSH METHOD = append method
+
+let fruits = ["banane", "orange"];
+
+//On va ajouter la valeur "pomme" à la fin du tableau
+fruits.push("pomme");
+
+// Affiche ["banane", "orange", "pomme"] dans la console
+console.log(fruits);
+
+//// POP METHOD : Delete the last item
+
+//On supprime la dernière entrée du tableau
+fruits.pop();
+
+ // Affiche ["banane", "orange"] dans la console
+console.log(fruits);
+
+
+//// SHIFT METHOD : Delete the first item
+
+//On supprime la première entrée du tableau
+fruits.shift();
+
+ // Affiche ["orange", "pomme"] dans la console
+console.log(fruits);
+
+//// UNSHIFT METHOD : ajoute un ou plusieurs éléments au début du tableau
+
+//Ajouter un élément au début du tableau
+fruits.unshift("banane");
+
+ // Affiche ["banane", "orange", "pomme"] dans la console
+console.log(fruits);
+
+
+///// 
+
+// L'initialisation : 1ère partie de la structure, 
+// Prépare une variable compteur pour garder un oeil sur la progression de la structure.
+
+// 2 Condition de répétition : 
+// Condition qui, tant qu'elle est vraie, permet la répétition du code. 
+// Généralement basée sur la valeur de la variable compteur.
+
+// 3 L'incrémentation : 
+// Exécutée à la fin de chaque tour de boucle pour mettre à jour la variable compteur
+// Permet une invalidation de la condition de répétition et donc un arrêt de la boucle.
+
+// Par exemple, pour afficher chaque élément du tableau ["banane", "pomme", "orange", "kiwi"], on peut écrire une boucle for comme suit : 
+
+let fruits2 = ["banane", "pomme", "orange", "kiwi"];
+
+for(let i = 0; i < fruits2.length; i++) {
+
+   console.log(fruits2[i]);
+}
+
+
+//Boucle While
+
+let fruits3 = ["banane", "pomme", "orange", "kiwi"];
+let i = 0;
+
+while (i < fruits3.length) {
+
+  console.log(fruits3[i]);
+  i++;
+
+}
+
+// DO While
+
+do {
+
+  console.log(fruits3[i]);
+  i++;
+
+} while (i < fruits3.length);
+
+
