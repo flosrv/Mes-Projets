@@ -1,7 +1,7 @@
-let message_exo = "Ceci est une constante"
+let message_exo = "Ceci est une variable"
 
 alert(message_exo)
 
-message_exo = 22222
+message_exo = "Ceci est une variable modifiée"
 
 alert(message_exo)
