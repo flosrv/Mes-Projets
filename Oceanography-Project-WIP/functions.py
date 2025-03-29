@@ -802,18 +802,85 @@ def process_datetime_column(df, column):
         df[column] = pd.to_datetime(df[column], errors='coerce', utc=True)
         print(f"📌 Conversion réussie de '{column}' en datetime.")
 
-        try:
-            # Renommer la colonne AVANT d'appliquer floor()
-            df.rename(columns={column: 'Datetime'}, inplace=True)
-            print(f'Successfully renamed column to "Datetime ! ')
-        except Exception as e :
-            print(f'Impossible to rename the column:\n {e}')
-        # Appliquer l'arrondi sur la NOUVELLE colonne renommée
-        df['Datetime'] = df['Datetime'].dt.floor('H')
+        # Renommer la colonne AVANT d'appliquer floor()
+        df.rename(columns={column: 'Datetime'}, inplace=True)
+        print('✅ Successfully renamed column to "Datetime"!')
+
+        # Appliquer l'arrondi sur la nouvelle colonne renommée et supprimer le fuseau horaire
+        df['Datetime'] = df['Datetime'].dt.floor('H').dt.tz_localize(None)
+        
     except Exception as e:
         print(f"🚨 ERREUR lors de la conversion de '{column}' : {e}")
     
     return df  # Toujours retourner le DataFrame modifié
+
+
+def clean_dataframe(df, cols_to_convert, verbose=False):
+
+    # Faire une copie du DataFrame pour éviter les modifications sur une vue
+    df = df.copy()
+
+    # Supprimer les colonnes 100% vides
+    df.dropna(axis=1, how="all", inplace=True)
+
+    # Conversion des colonnes en float
+    for col in cols_to_convert:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    
+            # Remplacement des NaN par des valeurs adaptées
+            df.fillna(df.median(numeric_only=True), inplace=True)
+
+    # Cas spécifiques : visibilité et températures
+    if "visibility" in df.columns:
+        df["visibility"].fillna(df["visibility"].mean(), inplace=True)
+
+    if "water_level_above_mean" in df.columns:
+        df["water_level_above_mean"].fillna(0, inplace=True)
+
+    if "air_temperature" in df.columns:
+        df["air_temperature"].fillna(df["air_temperature"].median(), inplace=True)
+
+    if "water_temperature" in df.columns:
+        df["water_temperature"].fillna(df["water_temperature"].median(), inplace=True)
+
+    # Vérification finale
+    if verbose:
+        if df.isnull().sum().sum() > 0:
+            print("⚠️ Il reste encore des NaN !")
+        else:
+            print("✅ Toutes les valeurs ont été remplacées avec succès !")
+        print(df.dtypes)
+
+    return df
+
+
+def convert_columns_to_numeric(df, cols_to_convert):
+
+    df = df.copy()  # Éviter de modifier l'original
+
+    try:
+        # Convertir les colonnes spécifiées en float, en remplaçant les erreurs par NaN
+        for col in cols_to_convert:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # Convertir 'is_day' en int s'il existe dans le DataFrame
+        if "is_day" in df.columns:
+            df["is_day"] = df["is_day"].astype(float).astype(int)
+        print(f"Columns Successfully Converted !")
+    except Exception as e:
+        print(f"Error in Columns Conversions !")
+
+    return df
+
+
+
+
+
+
+
+
 
 
 
