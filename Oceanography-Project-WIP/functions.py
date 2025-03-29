@@ -176,38 +176,6 @@ def convert_to_datetime(date_value):
     except ValueError as e:
         # Si la conversion échoue, on retourne la valeur d'origine (sans la modifier)
         return date_value  # Retourne la valeur d'origine sans la modifier
-def process_and_resample(df, column_name, resample_interval='h'):
-    try:
-        # Vérification si la colonne existe dans le DataFrame
-        if column_name not in df.columns:
-            print(f"Erreur : La colonne '{column_name}' n'existe pas dans le DataFrame.")
-            return df
-
-        # Appliquer la fonction lambda qui utilise convert_to_datetime pour chaque élément
-        df[column_name] = df[column_name].apply(lambda x: convert_to_datetime(x))
-
-        # Supprimer les lignes où la conversion a échoué (valeurs None)
-        df = df.dropna(subset=[column_name])
-
-        # Filtrer pour garder uniquement les lignes où les minutes et les secondes sont 00
-        df = df[df[column_name].dt.minute == 0]
-        df = df[df[column_name].dt.second == 0]
-
-        # Renommer la colonne spécifiée en 'Datetime' à la fin
-        df.rename(columns={column_name: 'Datetime'}, inplace=True)
-
-        # Retourner la DataFrame résultante
-        return df
-    
-    except ValueError as e:
-        print(f"Erreur de conversion des dates : {e}")
-        return df
-    except KeyError as e:
-        print(f"Erreur : La colonne spécifiée n'a pas été trouvée dans le DataFrame. ({e})")
-        return df
-    except Exception as e:
-        print(f"Erreur inattendue : {e}")
-        return df
 
 def handle_null_values(df):
     # Calcul du pourcentage de valeurs manquantes par colonne
@@ -255,7 +223,6 @@ def handle_null_values(df):
         print(f"Imputed columns (<50% missing, median): {', '.join(imputed_columns)}")
     if skipped_columns:
         print(f"Skipped non-numeric columns: {', '.join(skipped_columns)}")
-
     return df
 
 def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'):
@@ -420,6 +387,7 @@ def connect_postgresql(user: str, password : str, host, port):
     conn = engine.connect()
     return conn
 # Fonction pour créer une base de données si elle n'existe pas
+
 def create_database(dbname, user, password, host, port):
     """Crée une base de données si elle n'existe pas déjà."""
     # Se connecter à la base 'postgres' pour créer d'autres DB
@@ -532,37 +500,6 @@ def fetch_and_add_data(table_dict, conn, schema, as_df=False):
             print(f"Warning: Element {station_id} is not a dictionary {type(station_id)},  skipping.")
     
     return table_dict
-
-def auto_convert(df):
-    warnings.filterwarnings("ignore", category=UserWarning)
-
-    for col in df.columns:
-        # On vérifie si la colonne est déjà de type datetime ou time, dans ce cas on la laisse inchangée
-        if df[col].dtype in ['datetime64[ns, UTC]', 'datetime64[ns]', 'timedelta64[ns]']:
-            continue
-
-        # Si la colonne est de type 'object', on tente de la convertir en datetime
-        if df[col].dtype == 'object':
-            try:
-                # Utiliser la fonction convert_to_datetime pour convertir les valeurs
-                df[col] = df[col].apply(lambda x: convert_to_datetime(x))
-            except Exception as e:
-                continue  # Continue même si une erreur survient
-
-        # Ensuite, on tente de convertir les colonnes restantes en numériques
-        try:
-            # Utilisation de 'coerce' pour convertir les erreurs en NaN
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        except Exception as e:
-            continue  # Continue même si une erreur survient
-
-        try:
-            # Utilisation de 'astype(str)' pour convertir la colonne en string
-            df[col] = df[col].astype(str)
-        except Exception as e:
-            continue  # Continue même si une erreur survient
-
-    return df
 
 def convert_coordinates(lat, lon):
     # Conversion de la latitude
@@ -856,9 +793,6 @@ def get_day_time(col):
     return daytime, month
 
 def process_datetime_column(df, column):
-  
-    df = df.copy()  # Évite le SettingWithCopyWarning
-
     # Convertir la colonne en chaîne de caractères au tout début
     df[column] = df[column].astype(str)
     print(f"📌 La colonne '{column}' est maintenant convertie en chaîne de caractères.")
@@ -867,16 +801,19 @@ def process_datetime_column(df, column):
     try:
         df[column] = pd.to_datetime(df[column], errors='coerce', utc=True)
         print(f"📌 Conversion réussie de '{column}' en datetime.")
+
+        try:
+            # Renommer la colonne AVANT d'appliquer floor()
+            df.rename(columns={column: 'Datetime'}, inplace=True)
+            print(f'Successfully renamed column to "Datetime ! ')
+        except Exception as e :
+            print(f'Impossible to rename the column:\n {e}')
+        # Appliquer l'arrondi sur la NOUVELLE colonne renommée
+        df['Datetime'] = df['Datetime'].dt.floor('H')
     except Exception as e:
         print(f"🚨 ERREUR lors de la conversion de '{column}' : {e}")
     
-    # Appliquer un arrondi à l'heure
-    df[column] = df[column].dt.floor('H')
-
-    # Renommer la colonne
-    df.rename(columns={column: 'Datetime'}, inplace=True)
-
-    return df
+    return df  # Toujours retourner le DataFrame modifié
 
 
 
