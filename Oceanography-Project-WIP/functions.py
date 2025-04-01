@@ -1,5 +1,131 @@
 from imports import *
-import warnings
+
+Base = declarative_base()
+
+CATALOG_TABLE = "pg_catalog.pg_tables"
+
+
+def check_if_table_exists(conn:sqlalchemy.engine.base.Connection, schema:str, table_name:str):
+    insp = inspect(conn)
+    return insp.has_table(table_name, schema=schema)
+
+def create_table_if_not_exists(conn, schema, table_name, df):
+# Vérifier si la table existe, sinon la créer
+    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
+    table_exists = result.fetchone()[0]
+
+    if not table_exists:
+        print(f"Table '{table_name}' does not exist. Creating...")
+
+#         # Définir un type de colonne par défaut (par exemple, 'VARCHAR')
+#         columns_definition = ', '.join([f'"{col_name}" VARCHAR' for col_name in df.columns])
+
+#         # Créer la requête SQL pour créer la table avec les colonnes spécifiées
+#         create_table_query = f"""
+#         CREATE TABLE IF NOT EXISTS \"{schema}\".\"{table_name}\" (
+#             id SERIAL PRIMARY KEY,
+#             {columns_definition}
+#         );
+#         """
+#         try:
+#             conn.execute(text(create_table_query))  # Exécution directe de la requête
+#             conn.commit()  # S'assurer que la transaction est validée
+#             print(f"Table '{table_name}' created in schema '{schema}'.")
+#         except Exception as e:
+#             print(f"Error while creating table '{table_name}' in schema '{schema}': {e}")
+
+#     else:
+#         print(f"Table '{table_name}' already exists.")
+
+
+
+
+
+
+def get_buoy_url(station_id):
+            station_id_str = str(station_id)
+            url = f"https://www.ndbc.noaa.gov/station_page.php?station={station_id_str}"
+            return url
+
+def load_data_in_table(engine:sqlalchemy.engine.base.Engine, schema:str, 
+                       table_name:str, df:pd.DataFrame, key_column:str):
+
+    # Ouvrir une nouvelle transaction
+    try:
+        with engine.connect() as conn:
+            inspector = inspect(conn)
+            # Vérifier et créer le schéma si nécessaire
+            if schema not in inspector.get_schema_names():
+                conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+                conn.commit()
+                print(f'Schema "{schema}" created.')
+
+            # Vérifier si la table existe
+            if not inspector.has_table(table_name, schema=schema):
+                print(f"Table '{table_name}' does not exist. Creating...")
+
+                # Définir dynamiquement les types SQL
+                type_mapping = {
+                    'int64': Integer(),
+                    'float64': Float(),
+                    'object':  String(),
+                    'bool': Boolean()
+                }
+                columns_sql = ", ".join([f'"{col}" {type_mapping.get(str(df[col].dtype), "TEXT")}' for col in df.columns])
+
+                create_table_query = f'''
+                CREATE TABLE "{schema}"."{table_name}" (
+                    id SERIAL PRIMARY KEY,
+                    {columns_sql}
+                );'''
+                conn.execute(text(create_table_query))
+                conn.commit()
+            print(f"Table '{table_name}' created in schema '{schema}'.")
+
+        # Vérifier et éviter les doublons
+        existing_values_set = set()
+        if key_column:
+            try:
+                query = f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"'
+                existing_values = pd.read_sql(query, conn)
+                existing_values_set = set(existing_values[key_column])
+            except Exception as e:
+                print(f"Error retrieving existing values: {e}")
+
+        new_data = df if key_column is None else df[~df[key_column].isin(existing_values_set)]
+
+        rows_before_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
+
+        rows_inserted = 0  # Initialiser à 0, afin qu'il y ait toujours une valeur
+        if not new_data.empty:
+            try:
+                # Utiliser bulk insert pour plus de rapidité
+                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False, method='multi')
+
+                # Compter les lignes réellement insérées
+                rows_inserted = len(new_data)
+                print(f"New data inserted successfully!")
+            except Exception as e:
+                print(f"Error inserting new data: {e}\n")
+        else:
+            print("No new data to insert.\n")
+
+        # Compter le nombre de lignes dans la table après l'insertion
+        rows_after_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
+
+        # Affichage des résultats
+        if rows_inserted == 0:
+            print(f"No new data was inserted.")
+        
+        print(f"Rows in table before insertion: {rows_before_insert}")
+        print(f"Rows inserted: {rows_inserted}")
+        print(f"Rows in table after insertion: {rows_after_insert}\n")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        conn.rollback()  # Annuler la transaction en cas d'erreur
+    finally:
+        conn.commit()  # Toujours valider la transaction
 
 def show_first_row(df):
     # Récupérer la première ligne du DataFrame
@@ -381,13 +507,6 @@ def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'
 
             return pd.DataFrame(daily_data)
 
-def connect_postgresql(user: str, password : str, host, port):
-    # Créer l'engine PostgreSQL
-    engine = create_engine(f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}")
-    conn = engine.connect()
-    return conn
-# Fonction pour créer une base de données si elle n'existe pas
-
 def create_database(dbname, user, password, host, port):
     """Crée une base de données si elle n'existe pas déjà."""
     # Se connecter à la base 'postgres' pour créer d'autres DB
@@ -444,28 +563,89 @@ def print_with_flush(message):
     sys.stdout.write(f'\r{message}  ')  # \r permet de revenir au début de la ligne
     sys.stdout.flush()  # Force l'affichage immédiat
 
+# Extraction des valeurs avec sécurité
+def safe_get(dico, key):
+    value = dico.get(key, "N/A")  # Valeur par défaut si clé absente
+    print(f"📊 {key} : {value}")
+    return value
+
+# 🔹 Nettoyer les valeurs numériques (supprimer tout sauf chiffres et ".")
+def clean_numeric(value):
+    if value is None:
+        return None  # ⚠️ Évite de faire `.replace()` sur None !
+    return re.sub(r"[^\d.]", "", value).strip()  # Supprime tout sauf chiffres et "."
+
 def parse_buoy_json(buoy_metadata):
+    print("\n🔍 Début du parsing de la bouée...")
+
     # Vérifier la présence des clés requises
+    if not isinstance(buoy_metadata, dict):
+        raise ValueError("❌ Les données fournies ne sont pas un dictionnaire valide.")
+
     if 'Name' not in buoy_metadata or 'Location' not in buoy_metadata:
-        raise ValueError("Les clés 'Name' et 'Location' doivent être présentes dans les données.")
+        raise ValueError("❌ Les clés 'Name' et 'Location' doivent être présentes dans les données.")
 
     Name = buoy_metadata['Name']
 
     # Trouver tout ce qui vient après le premier tiret
     name_parts = Name.split(' - ', 2)
-    
-    station_zone = name_parts[1].strip().lower()
+    station_zone = name_parts[1].strip().lower() if len(name_parts) > 1 else "Unknown"
+    print(f"🌍 Zone de la station : {station_zone}")
 
-    station_id = Name.split(' ')[1]
+    # Extraction de l'ID
+    name_split = Name.split()
+    station_id = name_split[1] if len(name_split) > 1 else "Unknown"
+    print(f"🆔 Station ID : {station_id}")
+
     # Extraction des coordonnées depuis "Location"
     location_parts = buoy_metadata["Location"].split()
+
     if len(location_parts) < 4:
-        raise ValueError("Format de 'Location' invalide")
+        raise ValueError("❌ Format de 'Location' invalide (au moins 4 éléments attendus).")
 
-    lat_buoy = f"{float(location_parts[0]):.2f}{location_parts[1]}"
-    lon_buoy = f"{float(location_parts[2]):.2f}{location_parts[3]}"
+    try:
+        lat_buoy = f"{float(location_parts[0]):.2f}{location_parts[1]}"
+        lon_buoy = f"{float(location_parts[2]):.2f}{location_parts[3]}"
+        print(f"✅ Coordonnées extraites : Latitude = {lat_buoy}, Longitude = {lon_buoy}")
+    except ValueError:
+        raise ValueError("❌ Impossible de convertir les coordonnées en nombres.")
 
-    return station_id, station_zone, lat_buoy, lon_buoy
+    # Extraire les autres valeurs avec des valeurs par défaut si non présentes
+    Water_depth = buoy_metadata.get("Water depth", "N/A")
+    print(f"🌊 Water Depth : {Water_depth}")
+    
+    sea_temp_depth = clean_numeric(buoy_metadata.get("Sea temp depth"))
+    print(f"🌡️ Sea Temp Depth : {sea_temp_depth}")
+    
+    Barometer_elevation = clean_numeric(buoy_metadata.get("Barometer elevation"))
+    print(f"🌬️ Barometer Elevation : {Barometer_elevation}")
+    
+    Anemometer_height = clean_numeric(buoy_metadata.get("Anemometer height"))
+    print(f"💨 Anemometer Height : {Anemometer_height}")
+    
+    Air_temp_height = clean_numeric(buoy_metadata.get("Air temp height"))
+    print(f"🌤️ Air Temp Height : {Air_temp_height}")
+
+    # Récupérer l'URL de la bouée
+    url = get_buoy_url(station_id)
+    print(f"🔗 URL de la bouée : {url}")
+
+    # Création du dictionnaire final
+    data = {
+        "station_zone": station_zone,
+        "lat_buoy": lat_buoy,
+        "lon_buoy": lon_buoy,
+        "Water_depth": Water_depth,
+        "sea_temp_depth": sea_temp_depth,
+        "Barometer_elevation": Barometer_elevation,
+        "Anemometer_height": Anemometer_height,
+        "Air_temp_height": Air_temp_height,
+        "url": url
+    }
+
+    print("✅ Parsing terminé !\n")
+    return data
+
 
 def fetch_and_add_data(table_dict, conn, schema, as_df=False):
     for station_id, tables in table_dict.items():
@@ -514,87 +694,9 @@ def convert_coordinates(lat, lon):
 
     return round(lat_value, 2), round(lon_value, 2)
 
-def load_data_in_table(conn, schema, table_name, df, key_column):
-    # Ouvrir une nouvelle transaction
-    try:
-        inspector = inspect(conn)
-
-        # Vérifier et créer le schéma si nécessaire
-        if schema not in inspector.get_schema_names():
-            conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-            conn.commit()
-            print(f'Schema "{schema}" created.')
-
-        # Vérifier si la table existe
-        if not inspector.has_table(table_name, schema=schema):
-            print(f"Table '{table_name}' does not exist. Creating...")
-
-            # Définir dynamiquement les types SQL
-            type_mapping = {
-                'int64': 'INTEGER',
-                'float64': 'FLOAT',
-                'object': 'TEXT',
-                'bool': 'BOOLEAN'
-            }
-            columns_sql = ", ".join([f'"{col}" {type_mapping.get(str(df[col].dtype), "TEXT")}' for col in df.columns])
-
-            create_table_query = f'''
-            CREATE TABLE "{schema}"."{table_name}" (
-                id SERIAL PRIMARY KEY,
-                {columns_sql}
-            );'''
-            conn.execute(text(create_table_query))
-            conn.commit()
-            print(f"Table '{table_name}' created in schema '{schema}'.")
-
-        # Vérifier et éviter les doublons
-        existing_values_set = set()
-        if key_column:
-            try:
-                query = f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"'
-                existing_values = pd.read_sql(query, conn)
-                existing_values_set = set(existing_values[key_column])
-            except Exception as e:
-                print(f"Error retrieving existing values: {e}")
-
-        new_data = df if key_column is None else df[~df[key_column].isin(existing_values_set)]
-
-        rows_before_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
-
-        rows_inserted = 0  # Initialiser à 0, afin qu'il y ait toujours une valeur
-        if not new_data.empty:
-            try:
-                # Utiliser bulk insert pour plus de rapidité
-                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False, method='multi')
-
-                # Compter les lignes réellement insérées
-                rows_inserted = len(new_data)
-                print(f"New data inserted successfully!")
-            except Exception as e:
-                print(f"Error inserting new data: {e}\n")
-        else:
-            print("No new data to insert.\n")
-
-        # Compter le nombre de lignes dans la table après l'insertion
-        rows_after_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
-
-        # Affichage des résultats
-        if rows_inserted == 0:
-            print(f"No new data was inserted.")
-        
-        print(f"Rows in table before insertion: {rows_before_insert}")
-        print(f"Rows inserted: {rows_inserted}")
-        print(f"Rows in table after insertion: {rows_after_insert}\n")
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        conn.rollback()  # Annuler la transaction en cas d'erreur
-    finally:
-        conn.commit()  # Toujours valider la transaction
-
 def drop_tables(conn, schema_name, drop_schema=False, table_name_filter=None):
     try:
-        # Vérifier si le schéma existe
+        # Créer un inspecteur pour vérifier les schémas
         inspector = inspect(conn)
         schemas = inspector.get_schema_names()
         
@@ -602,25 +704,26 @@ def drop_tables(conn, schema_name, drop_schema=False, table_name_filter=None):
             print(f"Schema '{schema_name}' does not exist.")
             return
         
+        # Créer un objet metadata et charger toutes les tables
+        metadata = MetaData(bind=conn)
+        metadata.reflect(schema=schema_name)
+        
         # Obtenir la liste des tables du schéma
         print(f"Fetching tables from schema '{schema_name}'...")
+        tables = metadata.tables
         
-        query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{schema_name}'"
-        tables = pd.read_sql(query, conn)
-        
-        if tables.empty:
-            print(f"No tables found in schema '{schema_name}'.")
-            return
-        
-        # Si un filtre sur les tables est fourni, l'appliquer
+        # Filtrer les tables si un filtre de nom est fourni
         if table_name_filter:
-            tables = tables[tables['table_name'].str.contains(table_name_filter, case=False, na=False)]
-            if tables.empty:
+            filtered_tables = {name: table for name, table in tables.items() if table_name_filter.lower() in name.lower()}
+            if not filtered_tables:
                 print(f"No tables found matching the filter '{table_name_filter}' in schema '{schema_name}'.")
                 return
-            print(f"Tables matching the filter '{table_name_filter}':\n{tables}")
+            print(f"Tables matching the filter '{table_name_filter}':\n{filtered_tables.keys()}")
+        else:
+            filtered_tables = tables
+            print(f"Tables found in schema '{schema_name}':\n{filtered_tables.keys()}")
         
-        # Gérer les verrous : avant de supprimer, vérifier les processus en attente de verrou
+        # Vérifier les verrous existants avant de continuer
         print("Checking for existing locks...")
         query_locks = """
             SELECT
@@ -646,27 +749,28 @@ def drop_tables(conn, schema_name, drop_schema=False, table_name_filter=None):
             time.sleep(5)  # Attendre 5 secondes avant de tenter la suppression des tables
         
         # Supprimer les tables une par une dans des transactions distinctes
-        for table in tables['table_name']:
-            try:
-                # Commencer une transaction distincte pour chaque table
-                print(f"\nDropping table '{table}'...")
-                # Begin a transaction for each table drop
-                with conn.begin():
-                    conn.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{table}" CASCADE'))
-                    print(f"Table '{table}' dropped.")
+        with conn.begin():  # Utilisation du bloc `with conn` pour garantir la gestion des transactions
+            for table_name, table in filtered_tables.items():
+                try:
+                    # Supprimer la table
+                    print(f"\nDropping table '{table_name}'...")
+                    conn.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{table_name}" CASCADE'))
+                    print(f"Table '{table_name}' dropped.")
                     time.sleep(1)  # Délai d'une seconde entre chaque suppression
-            except Exception as e:
-                print(f"Error dropping table '{table}': {e}")
-        
-        # Si l'argument drop_schema est True, supprimer également le schéma
-        if drop_schema:
-            conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
-            print(f"\nSchema '{schema_name}' and all its objects have been dropped.")
-        else:
-            print(f"\nTables dropped from schema '{schema_name}', but schema not removed.")
+                except Exception as e:
+                    print(f"Error dropping table '{table_name}': {e}")
+
+            # Si l'argument drop_schema est True, supprimer également le schéma
+            if drop_schema:
+                print(f"Dropping schema '{schema_name}'...")
+                conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+                print(f"Schema '{schema_name}' and all its objects have been dropped.")
+            else:
+                print(f"\nTables dropped from schema '{schema_name}', but schema not removed.")
 
     except Exception as e:
         print(f"Error dropping tables in schema '{schema_name}': {e}")
+
 
 def list_tables_info(conn, schema):
     try:
@@ -729,23 +833,6 @@ def count_files_in_directory(output_dir):
     
     except Exception as e:
         print(f"Erreur dans la fonction count_files_in_directory: {e}")
-
-def show_popup(text):
-    root = tk.Tk()
-    root.title("Notification")
-    
-    # Empêcher la redimension de la fenêtre
-    root.resizable(False, False)
-
-    # Centrer le texte avec un peu de padding
-    label = tk.Label(root, text=text, padx=20, pady=20, font=("Arial", 12))
-    label.pack()
-
-    # Fermer la fenêtre après 4 secondes
-    root.after(4000, root.destroy)
-    
-    # Afficher la fenêtre
-    root.mainloop()
 
 def rename_columns(df, columns):
 
@@ -814,7 +901,6 @@ def process_datetime_column(df, column):
     
     return df  # Toujours retourner le DataFrame modifié
 
-
 def clean_dataframe(df, cols_to_convert, verbose=False):
 
     # Faire une copie du DataFrame pour éviter les modifications sur une vue
@@ -854,25 +940,31 @@ def clean_dataframe(df, cols_to_convert, verbose=False):
 
     return df
 
-
 def convert_columns_to_numeric(df, cols_to_convert):
 
-    df = df.copy()  # Éviter de modifier l'original
 
-    try:
-        # Convertir les colonnes spécifiées en float, en remplaçant les erreurs par NaN
-        for col in cols_to_convert:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.copy()  # Ne pas modifier l'original
 
-        # Convertir 'is_day' en int s'il existe dans le DataFrame
-        if "is_day" in df.columns:
-            df["is_day"] = df["is_day"].astype(float).astype(int)
-        print(f"Columns Successfully Converted !")
-    except Exception as e:
-        print(f"Error in Columns Conversions !")
+    print("Columns before conversion:", df.columns)
 
+    for col in cols_to_convert:
+        if col in df.columns:
+            try:
+                # Essayer de convertir la colonne en numérique
+                df[col] = pd.to_numeric(df[col], errors="raise")  # 'raise' lève une erreur si la conversion échoue
+            except ValueError:
+                print(f"⚠️ Impossible de convertir la colonne {col}, elle reste inchangée.")
+
+    # Si 'is_day' existe, convertissons-le en entier proprement
+    if "is_day" in df.columns:
+        try:
+            df["is_day"] = pd.to_numeric(df["is_day"], errors="raise").astype(int)
+        except ValueError:
+            print("⚠️ Impossible de convertir 'is_day' en entier, elle reste inchangée.")
+
+    print("Columns after conversion:", df.columns)
     return df
+
 
 
 
