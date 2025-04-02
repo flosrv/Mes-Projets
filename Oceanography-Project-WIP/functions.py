@@ -4,44 +4,6 @@ Base = declarative_base()
 
 CATALOG_TABLE = "pg_catalog.pg_tables"
 
-
-def check_if_table_exists(conn:sqlalchemy.engine.base.Connection, schema:str, table_name:str):
-    insp = inspect(conn)
-    return insp.has_table(table_name, schema=schema)
-
-def create_table_if_not_exists(conn, schema, table_name, df):
-# Vérifier si la table existe, sinon la créer
-    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
-    table_exists = result.fetchone()[0]
-
-    if not table_exists:
-        print(f"Table '{table_name}' does not exist. Creating...")
-
-#         # Définir un type de colonne par défaut (par exemple, 'VARCHAR')
-#         columns_definition = ', '.join([f'"{col_name}" VARCHAR' for col_name in df.columns])
-
-#         # Créer la requête SQL pour créer la table avec les colonnes spécifiées
-#         create_table_query = f"""
-#         CREATE TABLE IF NOT EXISTS \"{schema}\".\"{table_name}\" (
-#             id SERIAL PRIMARY KEY,
-#             {columns_definition}
-#         );
-#         """
-#         try:
-#             conn.execute(text(create_table_query))  # Exécution directe de la requête
-#             conn.commit()  # S'assurer que la transaction est validée
-#             print(f"Table '{table_name}' created in schema '{schema}'.")
-#         except Exception as e:
-#             print(f"Error while creating table '{table_name}' in schema '{schema}': {e}")
-
-#     else:
-#         print(f"Table '{table_name}' already exists.")
-
-
-
-
-
-
 def get_buoy_url(station_id):
             station_id_str = str(station_id)
             url = f"https://www.ndbc.noaa.gov/station_page.php?station={station_id_str}"
