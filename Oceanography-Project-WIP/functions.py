@@ -2,104 +2,150 @@ from imports import *
 
 Base = declarative_base()
 
-CATALOG_TABLE = "pg_catalog.pg_tables"
+
+def convert_df_columns(df):
+    """
+    Convertit chaque colonne en son type approprié sans modifier les données
+    ou introduire des NaN.
+    
+    Args:
+    - df: pd.DataFrame. Le DataFrame à traiter.
+    
+    Returns:
+    - pd.DataFrame: Le DataFrame avec les types de données convertis.
+    """
+    
+    # Traitement des colonnes avec les types appropriés
+    for col in df.columns:
+        # Convertir les colonnes numériques
+        if df[col].dtype == 'object':
+            # Tenter de convertir en float si c'est un nombre représenté par des strings
+            try:
+                # Convertir en float pour les colonnes qui peuvent l'être (ex: "Wind Speed (km/h)", "Pressure (hPa)", etc.)
+                df[col] = pd.to_numeric(df[col], errors='raise')
+            except ValueError:
+                # Si la conversion échoue, laisser la colonne intacte
+                pass
+                
+        # Convertir des dates si la colonne contient des chaînes de caractères représentant des dates
+        if df[col].dtype == 'object' and 'date' in col.lower():
+            try:
+                df[col] = pd.to_datetime(df[col], errors='raise')
+            except ValueError:
+                pass
+        
+        # Convertir les booléens (is_day) en int
+        if col == "is_day":
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+
+    # Assurer les types numériques pour les colonnes déjà numériques mais mal typées
+    for col in df.select_dtypes(include=['float64', 'int64']).columns:
+        df[col] = df[col].astype(pd.Float64Dtype())  # Garantir une gestion correcte des NaN dans les colonnes numériques
+
+    return df
 
 def get_buoy_url(station_id):
             station_id_str = str(station_id)
             url = f"https://www.ndbc.noaa.gov/station_page.php?station={station_id_str}"
             return url
 
-def load_data_in_table(engine:sqlalchemy.engine.base.Engine, schema:str, 
-                       table_name:str, df:pd.DataFrame, key_column:str):
-
-    # Ouvrir une nouvelle transaction
+def fetch_table_data(engine, table_name: str) -> pd.DataFrame:
+    """
+    Récupère les données d'une table MySQL dans une DataFrame Pandas.
+    
+    Params:
+        engine: SQLAlchemy engine pour la connexion MySQL.
+        table_name (str): Nom de la table à récupérer.
+    
+    Returns:
+        pd.DataFrame: DataFrame contenant les données de la table.
+    """
     try:
-        with engine.connect() as conn:
-            inspector = inspect(conn)
-            # Vérifier et créer le schéma si nécessaire
-            if schema not in inspector.get_schema_names():
-                conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-                conn.commit()
-                print(f'Schema "{schema}" created.')
+        query = text(f"SELECT * FROM `{table_name}`;")
+        with engine.connect() as connection:
+            df = pd.read_sql(query, connection)
 
-            # Vérifier si la table existe
-            if not inspector.has_table(table_name, schema=schema):
-                print(f"Table '{table_name}' does not exist. Creating...")
-
-                # Définir dynamiquement les types SQL
-                type_mapping = {
-                    'int64': Integer(),
-                    'float64': Float(),
-                    'object':  String(),
-                    'bool': Boolean()
-                }
-                columns_sql = ", ".join([f'"{col}" {type_mapping.get(str(df[col].dtype), "TEXT")}' for col in df.columns])
-
-                create_table_query = f'''
-                CREATE TABLE "{schema}"."{table_name}" (
-                    id SERIAL PRIMARY KEY,
-                    {columns_sql}
-                );'''
-                conn.execute(text(create_table_query))
-                conn.commit()
-            print(f"Table '{table_name}' created in schema '{schema}'.")
-
-        # Vérifier et éviter les doublons
-        existing_values_set = set()
-        if key_column:
-            try:
-                query = f'SELECT DISTINCT "{key_column}" FROM "{schema}"."{table_name}"'
-                existing_values = pd.read_sql(query, conn)
-                existing_values_set = set(existing_values[key_column])
-            except Exception as e:
-                print(f"Error retrieving existing values: {e}")
-
-        new_data = df if key_column is None else df[~df[key_column].isin(existing_values_set)]
-
-        rows_before_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
-
-        rows_inserted = 0  # Initialiser à 0, afin qu'il y ait toujours une valeur
-        if not new_data.empty:
-            try:
-                # Utiliser bulk insert pour plus de rapidité
-                new_data.to_sql(table_name, conn, schema=schema, if_exists='append', index=False, method='multi')
-
-                # Compter les lignes réellement insérées
-                rows_inserted = len(new_data)
-                print(f"New data inserted successfully!")
-            except Exception as e:
-                print(f"Error inserting new data: {e}\n")
-        else:
-            print("No new data to insert.\n")
-
-        # Compter le nombre de lignes dans la table après l'insertion
-        rows_after_insert = len(pd.read_sql(f'SELECT * FROM "{schema}"."{table_name}"', conn))
-
-        # Affichage des résultats
-        if rows_inserted == 0:
-            print(f"No new data was inserted.")
-        
-        print(f"Rows in table before insertion: {rows_before_insert}")
-        print(f"Rows inserted: {rows_inserted}")
-        print(f"Rows in table after insertion: {rows_after_insert}\n")
+        print(f"✅ Données récupérées depuis '{table_name}' ({len(df)} lignes).")
+        return df
 
     except Exception as e:
-        print(f"An error occurred: {e}")
-        conn.rollback()  # Annuler la transaction en cas d'erreur
-    finally:
-        conn.commit()  # Toujours valider la transaction
+        print(f"❌ Erreur lors de la récupération de '{table_name}' : {e}")
+        return pd.DataFrame()  # Retourne une DataFrame vide en cas d'erreur
 
-def show_first_row(df):
-    # Récupérer la première ligne du DataFrame
-    first_row = df.iloc[0]
-    
-    # Formater l'affichage des valeurs et des types
-    formatted_output = "\n".join(
-        f"{col:<30} {value}  ({df[col].dtype})" for col, value in first_row.items()
-    )
-    
-    # Afficher le résultat formaté
-    print(formatted_output)
+def create_table_in_mysql(df: pd.DataFrame, table_name: str, engine):
+    # Vérifier si la table existe déjà
+    check_table_sql = f"SHOW TABLES LIKE '{table_name}';"
+
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(text(check_table_sql))
+            if result.fetchone():
+                print(f"⚠️ La table '{table_name}' existe déjà dans MySQL.")
+                return  # Ne pas recréer la table si elle existe déjà
+
+            # Définition des colonnes
+            column_definitions = []
+            for column_name, dtype in df.dtypes.items():
+                if dtype == 'object': 
+                    column_type = "VARCHAR(255)"
+                elif dtype == 'int64':  
+                    column_type = "INT"
+                elif dtype == 'float64': 
+                    column_type = "FLOAT"
+                elif dtype == 'datetime64[ns]': 
+                    column_type = "DATETIME"
+                elif dtype == 'datetime64[ns, UTC]': 
+                    column_type = "DATETIME"
+                elif dtype == 'timedelta64[ns]':  
+                    column_type = "TIME"
+                elif dtype == 'bool':  
+                    column_type = "BOOLEAN"
+                elif dtype == 'time64[ns]': 
+                    column_type = "TIME"
+                else:
+                    column_type = "VARCHAR(255)" 
+
+                column_definitions.append(f"`{column_name}` {column_type}")
+
+            # Création de la table
+            create_table_sql = f"CREATE TABLE `{table_name}` ({', '.join(column_definitions)});"
+            connection.execute(text(create_table_sql))
+            print(f"✅ Table '{table_name}' créée avec succès dans MySQL.")
+
+    except Exception as e:
+        print(f"❌ Erreur lors de la création de la table : {e}")
+
+def insert_new_rows(engine, df: pd.DataFrame, table_name: str):
+    """
+    Insère uniquement les nouvelles lignes de df dans MySQL en comparant la colonne 'Datetime'.
+    """
+    try:
+        # Vérifier si la table existe et récupérer la valeur max de Datetime
+        query = f"SELECT MAX(Datetime) FROM `{table_name}`;"
+        with engine.connect() as connection:
+            result = connection.execute(text(query)).scalar()  # Récupérer la valeur max
+        
+        # Si la table est vide, insérer tout le DataFrame
+        if result is None:
+            print(f"💾 Aucune donnée dans '{table_name}', insertion de toutes les lignes.")
+            df.to_sql(name=table_name, con=engine, if_exists='append', index=False)
+            print(f"✅ {len(df)} nouvelles lignes insérées dans '{table_name}'.")
+            return
+        
+        # Filtrer les nouvelles lignes (celles avec un Datetime plus grand que la valeur max en base)
+        df["Datetime"] = pd.to_datetime(df["Datetime"])  # S'assurer que la colonne est bien en datetime
+        new_rows = df[df["Datetime"] > result]
+
+        if new_rows.empty:
+            print(f"✅ Aucune nouvelle ligne à insérer dans '{table_name}'.")
+            return
+
+        # Insérer uniquement les nouvelles lignes
+        new_rows.to_sql(name=table_name, con=engine, if_exists='append', index=False)
+        print(f"✅ {len(new_rows)} nouvelles lignes insérées dans '{table_name}'.")
+
+    except Exception as e:
+        print(f"❌ Erreur lors de l'insertion des nouvelles lignes : {e}")
 
 def show_null_counts(df):
     row_count = df.shape[0]
@@ -111,30 +157,6 @@ def show_null_counts(df):
     
     print(formatted_output)
 
-def fetch_table_data(conn, schema, table_name, as_df=False):
-    """
-    Récupère toutes les données d'une table PostgreSQL et les charge dans un DataFrame Pandas ou sous forme de JSON.
-
-    :param conn: Connexion SQLAlchemy active à la base de données PostgreSQL.
-    :param schema: Nom du schéma contenant la table.
-    :param table_name: Nom de la table à récupérer.
-    :param as_df: Si True, retourne un DataFrame Pandas, sinon retourne les données en JSON.
-    :return: DataFrame ou JSON contenant les données de la table.
-    """
-    query = text(f'SELECT * FROM "{schema}"."{table_name}"')
-    df = pd.read_sql(query, conn)
-    df = df.reset_index(drop=True)
-
-
-    if as_df:
-        return df
-    else:
-        result_dict = {}
-        for idx, row in df.iterrows():
-            row_dict = row.to_dict()  # Convertir chaque ligne en dictionnaire
-            result_dict[idx] = row_dict  # Ajouter chaque ligne comme une entrée dans le dictionnaire
-        return result_dict
-      
 def drop_columns_if_exist(df, columns_to_drop):
     existing_columns = []
     for col in columns_to_drop:
@@ -144,108 +166,6 @@ def drop_columns_if_exist(df, columns_to_drop):
         else: 
             print(f"Colonne '{col}' Non Trouvée")
     return df.drop(columns=existing_columns)
-
-def create_schema_and_table(conn, schema, table_name, col):
-    # Vérifier si le schéma existe, sinon le créer
-    result = conn.execute(text(f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{schema}'"))
-    if not result.fetchone():
-        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS \"{schema}\""))
-        print(f'Schema "{schema}" created.')
-    else:
-        print(f'Schema "{schema}" already exists.')
-
-    # Vérifier si la table existe, sinon la créer
-    result = conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = '{schema}' AND tablename = '{table_name}')"))
-    table_exists = result.fetchone()[0]
-
-    if not table_exists:
-        print(f"Table '{table_name}' does not exist. Creating...")
-
-        # Définir un type de colonne par défaut (par exemple, 'VARCHAR')
-        columns_definition = ', '.join([f'"{col_name}" VARCHAR' for col_name in col])
-
-        # Créer la requête SQL pour créer la table avec les colonnes spécifiées
-        create_table_query = f"""
-        CREATE TABLE IF NOT EXISTS \"{schema}\".\"{table_name}\" (
-            id SERIAL PRIMARY KEY,
-            {columns_definition}
-        );
-        """
-        try:
-            conn.execute(text(create_table_query))  # Exécution directe de la requête
-            conn.commit()  # S'assurer que la transaction est validée
-            print(f"Table '{table_name}' created in schema '{schema}'.")
-        except Exception as e:
-            print(f"Error while creating table '{table_name}' in schema '{schema}': {e}")
-
-    else:
-        print(f"Table '{table_name}' already exists.")
-
-def add_daytime_and_month_column(df, time_column='Datetime'):
-    """
-    Ajoute les colonnes 'DayTime' et 'Month' basées sur l'heure et le mois de la colonne 'Datetime' ou d'une autre colonne de type datetime.
-    
-    Parameters:
-    df (pd.DataFrame): La DataFrame sur laquelle ajouter les colonnes.
-    time_column (str): Nom de la colonne ou 'index' pour utiliser l'index datetime. Par défaut, utilise l'index.
-    
-    Returns:
-    pd.DataFrame: DataFrame avec les nouvelles colonnes 'DayTime' et 'Month'.
-    """
-    # Vérifier si la colonne choisie est valide
-    if time_column == 'index':
-        time_data = df.index
-    elif time_column in df.columns and pd.api.types.is_datetime64_any_dtype(df[time_column]):
-        time_data = df[time_column]
-    else:
-        raise ValueError("La colonne spécifiée n'est pas valide ou n'est pas de type datetime.")
-    
-    # Fonction pour déterminer la période de la journée
-    def get_daytime(hour):
-        if 6 <= hour < 12:
-            return "Morning"
-        elif 12 <= hour < 18:
-            return "Afternoon"
-        elif 18 <= hour < 21:
-            return "Evening"
-        else:
-            return "Night"
-    
-    # Si on utilise l'index (DatetimeIndex)
-    if isinstance(time_data, pd.DatetimeIndex):
-        # Extraire l'heure et le mois de l'index datetime
-        df['DayTime'] = time_data.hour.map(lambda hour: get_daytime(hour))
-        df['Month'] = time_data.month
-    elif isinstance(time_data, pd.Series) and pd.api.types.is_datetime64_any_dtype(time_data):
-        # Si c'est une colonne datetime classique
-        df['DayTime'] = time_data.dt.hour.map(lambda hour: get_daytime(hour))
-        df['Month'] = time_data.dt.month
-    else:
-        raise ValueError("Les données temporelles ne sont pas de type datetime.")
-
-    return df
-    
-    # Fonction pour déterminer la période de la journée
-    def get_daytime(hour):
-        if 6 <= hour < 12:
-            return "Morning"
-        elif 12 <= hour < 18:
-            return "Afternoon"
-        elif 18 <= hour < 21:
-            return "Evening"
-        else:
-            return "Night"
-    # Si on utilise l'index (DatetimeIndex)
-    if isinstance(time_data, pd.DatetimeIndex):
-        # Extraire l'heure et le mois de l'index datetime
-        df['DayTime'] = time_data.hour.map(lambda hour: get_daytime(hour))
-        df['Month'] = time_data.month
-    else:
-        # Si on utilise une colonne datetime classique
-        df['DayTime'] = time_data.dt.hour.map(lambda hour: get_daytime(hour))
-        df['Month'] = time_data.dt.month
-    
-    return df
 
 def convert_to_datetime(date_value):
     try:
@@ -469,32 +389,6 @@ def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'
 
             return pd.DataFrame(daily_data)
 
-def create_database(dbname, user, password, host, port):
-    """Crée une base de données si elle n'existe pas déjà."""
-    # Se connecter à la base 'postgres' pour créer d'autres DB
-    conn = connect_postgresql(user=user, password=password, host =host, port=port)
-    if conn is None:
-        return  # Si la connexion échoue, on arrête la fonction
-
-    conn.autocommit = True  # Désactiver la transaction active
-    cur = conn.cursor()
-    
-    # Vérifier si la base de données existe déjà
-    cur.execute(f"SELECT 1 FROM pg_database WHERE datname = '{dbname}'")
-    exists = cur.fetchone()
-
-    if not exists:
-        try:
-            cur.execute(f"CREATE DATABASE {dbname}")
-            print(f"✅ Base '{dbname}' créée.")
-        except Exception as e:
-            print(f"Erreur lors de la création de la base de données : {e}")
-    else:
-        print(f"ℹ️ La base '{dbname}' existe déjà.")
-
-    cur.close()
-    conn.close()
-
 def get_station_metadata(station_id):
     return api.station(station_id=station_id)
 
@@ -608,41 +502,6 @@ def parse_buoy_json(buoy_metadata):
     print("✅ Parsing terminé !\n")
     return data
 
-
-def fetch_and_add_data(table_dict, conn, schema, as_df=False):
-    for station_id, tables in table_dict.items():
-        # Vérifie que 'tables' est un dictionnaire
-        if isinstance(tables, dict):
-            bronze_marine_table = tables.get("bronze marine table name")
-            bronze_meteo_table = tables.get("bronze meteo table name")
-
-            try:
-                if bronze_marine_table:
-                    query = text(f'SELECT * FROM "{schema}"."{bronze_marine_table}"')
-                    marine_data = pd.read_sql(query, conn)
-                    # Conversion en JSON-compatible si nécessaire
-                    if not as_df:
-                        tables["silver marine data"] = marine_data.to_dict(orient='records')  # convert to dict
-                    else:
-                        tables["silver marine data"] = marine_data  # keep as DataFrame if needed
-
-                if bronze_meteo_table:
-                    query = text(f'SELECT * FROM "{schema}"."{bronze_meteo_table}"')
-                    meteo_data = pd.read_sql(query, conn)
-                    # Conversion en JSON-compatible si nécessaire
-                    if not as_df:
-                        tables["silver meteo data"] = meteo_data.to_dict(orient='records')  # convert to dict
-                    else:
-                        tables["silver meteo data"] = meteo_data  # keep as DataFrame if needed
-
-            except Exception as e:
-                print(f"Erreur pendant l'exécution pour station {station_id}: {e}")
-                conn.rollback()  # En cas d'erreur, on annule la transaction en cours
-        else:
-            print(f"Warning: Element {station_id} is not a dictionary {type(station_id)},  skipping.")
-    
-    return table_dict
-
 def convert_coordinates(lat, lon):
     # Conversion de la latitude
     lat_value = float(lat[:-1])  # On enlève la lettre 'n' ou 's' et on garde la valeur numérique
@@ -732,28 +591,6 @@ def drop_tables(conn, schema_name, drop_schema=False, table_name_filter=None):
 
     except Exception as e:
         print(f"Error dropping tables in schema '{schema_name}': {e}")
-
-
-def list_tables_info(conn, schema):
-    try:
-        # Obtenir une liste des tables dans le schéma
-        inspector = inspect(conn)
-        tables = inspector.get_table_names(schema=schema)
-        
-        if not tables:
-            print(f"Aucune table trouvée dans le schéma '{schema}'.")
-            return
-        
-        print(f"Tables dans le schéma '{schema}':\n")
-        
-        # Parcourir chaque table et obtenir le nombre de lignes
-        for table in tables:
-            query = f"SELECT COUNT(*) FROM \"{schema}\".\"{table}\""
-            row_count = pd.read_sql(query, conn).iloc[0, 0]
-            print(f"Table: {table}\nNombre de lignes: {row_count}")
-    
-    except Exception as e:
-        print(f"Erreur lors de la récupération des informations des tables : {e}")
 
 def count_files_in_directory(output_dir):
     try:
