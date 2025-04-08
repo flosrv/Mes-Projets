@@ -158,6 +158,7 @@ def show_null_counts(df):
     print(formatted_output)
 
 def drop_columns_if_exist(df, columns_to_drop):
+    print(f" Nombre initial de colonnes: {len(df.columns)}")  # Afficher les colonnes existantes
     existing_columns = []
     for col in columns_to_drop:
         if col in df.columns:
@@ -165,7 +166,8 @@ def drop_columns_if_exist(df, columns_to_drop):
             print(f"Colonne '{col}' Supprimée")
         else: 
             print(f"Colonne '{col}' Non Trouvée")
-    return df.drop(columns=existing_columns)
+    print(f" Nombre final de colonnes: {len(df.columns)}")
+    return df.drop(columns=existing_columns, inplace=True)
 
 def convert_to_datetime(date_value):
     try:
@@ -186,51 +188,51 @@ def convert_to_datetime(date_value):
         return date_value  # Retourne la valeur d'origine sans la modifier
 
 def handle_null_values(df):
+    # Calcul du nombre de lignes du DataFrame
+    num_rows = len(df)
+
+    # Attribution du tag et seuil en fonction du nombre de lignes
+    if num_rows > 100000:
+        tag = 'green'  # Vert pour les DataFrames de plus de 100 000 lignes
+        threshold = 70  # Plus souple pour les DataFrames verts (jusqu'à 70% de données manquantes)
+    elif 10000 < num_rows <= 100000:
+        tag = 'yellow'  # Jaune pour les DataFrames entre 10 000 et 100 000 lignes
+        threshold = 60  # Seuil intermédiaire pour les DataFrames jaunes (jusqu'à 60% de données manquantes)
+    elif 2000 < num_rows <= 10000:
+        tag = 'orange'  # Orange pour les DataFrames entre 2 000 et 10 000 lignes
+        threshold = 55  # Seuil modéré pour les DataFrames entre 2K et 10K (jusqu'à 55% de données manquantes)
+    else:
+        tag = 'red'  # Rouge pour les DataFrames de moins de 2 000 lignes
+        threshold = 50  # Plus strict pour les DataFrames rouges (jusqu'à 50% de données manquantes)
+
+    print(f"\nTag: {tag} - Nombre de lignes: {num_rows}")
+
     # Calcul du pourcentage de valeurs manquantes par colonne
     missing_percent = (df.isnull().sum() / len(df)) * 100
 
-    # Listes pour regrouper les colonnes selon l'action à prendre
-    dropped_columns_100 = []
-    dropped_columns_above_50 = []
-    imputed_columns = []
-    skipped_columns = []
-
-    # Gestion des valeurs manquantes
+    # Gestion des valeurs manquantes en fonction du tag
     for column in df.columns:
         null_percentage = missing_percent[column]  # Calcul du pourcentage de valeurs manquantes
 
-        if isinstance(null_percentage, (int, float)):
-            null_percentage = float(null_percentage)  # Assurez-vous que c'est un float
+        if null_percentage == 0:
+            print(f"Colonne '{column}' non modifiée (0% de valeurs manquantes)")
+            continue  # Skip this column if there are no missing values
 
-            if null_percentage == 100:
-                dropped_columns_100.append(column)
-                df = df.drop(columns=[column])
-            elif null_percentage > 50:
-                # Si la colonne est numérique, imputer les valeurs manquantes par la médiane
-                if df[column].dtype in ['float64', 'int64']:
-                    median_value = df[column].median()
-                    df[column] = df[column].fillna(median_value)
-                    imputed_columns.append(column)  # Ajout à la liste des colonnes imputées
-                else:
-                    dropped_columns_above_50.append(column)
-                    df = df.drop(columns=[column])  # Si ce n'est pas numérique, supprimer la colonne
-            elif null_percentage > 0:
-                if df[column].dtype in ['float64', 'int64']:
-                    median_value = df[column].median()
-                    df[column] = df[column].fillna(median_value)
-                    imputed_columns.append(column)
-                else:
-                    skipped_columns.append(column)
+        if null_percentage > threshold:  # Si + de X% de valeurs manquantes (dépend du tag)
+            df = df.drop(columns=[column]) 
+            print(f"Colonne '{column}' Supprimée (plus de {threshold}% de valeurs manquantes)")
 
-    # Affichage des logs
-    if dropped_columns_100:
-        print(f"Dropped columns (100% missing): {', '.join(dropped_columns_100)}")
-    if dropped_columns_above_50:
-        print(f"Dropped columns (>50% missing): {', '.join(dropped_columns_above_50)}")
-    if imputed_columns:
-        print(f"Imputed columns (<50% missing, median): {', '.join(imputed_columns)}")
-    if skipped_columns:
-        print(f"Skipped non-numeric columns: {', '.join(skipped_columns)}")
+        else:  # Si moins de X% de valeurs manquantes
+            if pd.api.types.is_numeric_dtype(df[column]):
+                median_value = df[column].median()
+                df[column] = df[column].fillna(median_value)  # Imputation par la médiane pour les colonnes numériques
+                print(f"Colonne '{column}' Imputée par la médiane ({round(null_percentage,2)}% de valeurs manquantes)")
+
+            else:
+                mode_value = df[column].mode()[0]  # Imputation par le mode pour les colonnes non numériques
+                df[column] = df[column].fillna(mode_value)
+                print(f"Colonne '{column}' Imputée par le mode ({round(null_percentage,2)}% de valeurs manquantes)")
+
     return df
 
 def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'):
@@ -392,45 +394,6 @@ def meteo_api_request(coordinates, mode='historical', days=92, interval='hourly'
 def get_station_metadata(station_id):
     return api.station(station_id=station_id)
 
-def extract_lat_lon_from_station_list(location):
-
-    # Expression régulière pour capturer la latitude et la longitude
-    lat_match = re.search(r'([+-]?\d+\.\d+|\d+)([NS])', location)
-    lon_match = re.search(r'([+-]?\d+\.\d+|\d+)([EW])', location)
-    
-    if lat_match and lon_match:
-        # Extraction des valeurs
-        lat = float(lat_match.group(1))
-        lon = float(lon_match.group(1))
-        
-        # Inverser la direction de la latitude et longitude si nécessaire
-        if lat_match.group(2) == 'S':  # Si la latitude est au Sud
-            lat = -lat
-        if lon_match.group(2) == 'W':  # Si la longitude est à l'Ouest
-            lon = -lon
-        
-        lat = round(lat, 2)
-        lon = round(lon, 2)
-        return lat, lon
-    return None, None
-
-def print_with_flush(message):
-
-    sys.stdout.write(f'\r{message}  ')  # \r permet de revenir au début de la ligne
-    sys.stdout.flush()  # Force l'affichage immédiat
-
-# Extraction des valeurs avec sécurité
-def safe_get(dico, key):
-    value = dico.get(key, "N/A")  # Valeur par défaut si clé absente
-    print(f"📊 {key} : {value}")
-    return value
-
-# 🔹 Nettoyer les valeurs numériques (supprimer tout sauf chiffres et ".")
-def clean_numeric(value):
-    if value is None:
-        return None  # ⚠️ Évite de faire `.replace()` sur None !
-    return re.sub(r"[^\d.]", "", value).strip()  # Supprime tout sauf chiffres et "."
-
 def parse_buoy_json(buoy_metadata):
     print("\n🔍 Début du parsing de la bouée...")
 
@@ -501,6 +464,45 @@ def parse_buoy_json(buoy_metadata):
 
     print("✅ Parsing terminé !\n")
     return data
+
+def extract_lat_lon_from_station_list(location):
+
+    # Expression régulière pour capturer la latitude et la longitude
+    lat_match = re.search(r'([+-]?\d+\.\d+|\d+)([NS])', location)
+    lon_match = re.search(r'([+-]?\d+\.\d+|\d+)([EW])', location)
+    
+    if lat_match and lon_match:
+        # Extraction des valeurs
+        lat = float(lat_match.group(1))
+        lon = float(lon_match.group(1))
+        
+        # Inverser la direction de la latitude et longitude si nécessaire
+        if lat_match.group(2) == 'S':  # Si la latitude est au Sud
+            lat = -lat
+        if lon_match.group(2) == 'W':  # Si la longitude est à l'Ouest
+            lon = -lon
+        
+        lat = round(lat, 2)
+        lon = round(lon, 2)
+        return lat, lon
+    return None, None
+
+def print_with_flush(message):
+
+    sys.stdout.write(f'\r{message}  ')  # \r permet de revenir au début de la ligne
+    sys.stdout.flush()  # Force l'affichage immédiat
+
+# Extraction des valeurs avec sécurité
+def safe_get(dico, key):
+    value = dico.get(key, "N/A")  # Valeur par défaut si clé absente
+    print(f"📊 {key} : {value}")
+    return value
+
+# 🔹 Nettoyer les valeurs numériques (supprimer tout sauf chiffres et ".")
+def clean_numeric(value):
+    if value is None:
+        return None  # ⚠️ Évite de faire `.replace()` sur None !
+    return re.sub(r"[^\d.]", "", value).strip()  # Supprime tout sauf chiffres et "."
 
 def convert_coordinates(lat, lon):
     # Conversion de la latitude
