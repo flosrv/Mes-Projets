@@ -166,8 +166,13 @@ def drop_columns_if_exist(df, columns_to_drop):
             print(f"Colonne '{col}' Supprimée")
         else: 
             print(f"Colonne '{col}' Non Trouvée")
+    
+    # Si des colonnes à supprimer existent, les supprimer
+    if existing_columns:
+        df = df.drop(columns=existing_columns)
+    
     print(f" Nombre final de colonnes: {len(df.columns)}")
-    return df.drop(columns=existing_columns, inplace=True)
+    return df
 
 def convert_to_datetime(date_value):
     try:
@@ -635,31 +640,6 @@ def count_files_in_directory(output_dir):
     except Exception as e:
         print(f"Erreur dans la fonction count_files_in_directory: {e}")
 
-def rename_columns(df, columns):
-
-    # Ensure the input is a DataFrame
-    if not isinstance(df, pd.DataFrame):
-        raise ValueError("Input must be a pandas DataFrame.")
-    
-    # Si rename_spec est un dictionnaire, on le transforme en liste de dictionnaires pour un traitement uniforme
-    if isinstance(columns, dict):
-        columns = [columns]  # Convertir en liste de dictionnaires pour uniformité
-    
-    # Process each dictionary in the list of rename_spec
-    if isinstance(columns, list):
-        for rename_dict in columns:
-            # Filtrer les colonnes qui existent à la fois dans le DataFrame et rename_spec
-            existing_columns = {col: rename_dict[col] for col in rename_dict if col in df.columns}
-            
-            # Renommer les colonnes uniquement si elles existent dans le DataFrame
-            if existing_columns:
-                df.rename(columns=existing_columns, inplace=True)
-            else:
-                print(f"⚠️ Aucune colonne à renommer pour ce spécification : {rename_dict}")
-    
-    # Retourner le DataFrame modifié
-    return df
-
 def get_day_time(col):
     # Extraire l'heure et le mois directement de l'objet Timestamp
     hour = col.hour
@@ -766,14 +746,46 @@ def convert_columns_to_numeric(df, cols_to_convert):
     print("Columns after conversion:", df.columns)
     return df
 
+def display_row_values(df):
+    # Calculer la largeur maximale pour chaque colonne afin de bien aligner les valeurs
+    column_widths = [max(df[col].astype(str).apply(len).max(), len(col)) for col in df.columns]
 
+    # Afficher les noms des colonnes, en tenant compte des largeurs maximales
+    column_headers = [col.ljust(column_widths[i]) for i, col in enumerate(df.columns)]
+    print("  |  ".join(column_headers))
+    print("-" * (sum(column_widths) + (len(df.columns) - 1) * 4))  # Ligne de séparation
 
+    # Afficher les 10 premières valeurs sous chaque colonne, alignées
+    for i in range(min(10, len(df))):  # Affiche jusqu'à 10 lignes ou le nombre de lignes disponibles
+        row_values = [str(df.iloc[i, col]).ljust(column_widths[col]) for col in range(len(df.columns))]
+        print("  |  ".join(row_values))
 
-
-
-
-
-
+def rename_columns(df, columns):
+    # Assurez-vous que l'entrée est bien un DataFrame
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Input must be a pandas DataFrame.")
+    
+    # Si `columns` est un dictionnaire, le convertir en une liste de dictionnaires pour un traitement uniforme
+    if isinstance(columns, dict):
+        columns = [columns]  # Convertir en liste de dictionnaires pour uniformité
+    
+    # Parcourir chaque dictionnaire de renommage
+    if isinstance(columns, list):
+        for rename_dict in columns:
+            # Créer un dictionnaire de colonnes existantes à renommer
+            existing_columns = {col: rename_dict[col] for col in rename_dict if col in df.columns}
+            
+            if existing_columns:
+                # Renommer les colonnes si elles existent dans le DataFrame
+                for old_name, new_name in existing_columns.items():
+                    print(f"🔄 Colonne '{old_name}' renommée en '{new_name}'")
+                
+                df.rename(columns=existing_columns, inplace=True)
+                print(f"✅ Colonnes renommées : {existing_columns}")
+            else:
+                print(f"⚠️ Aucune colonne à renommer pour ce dictionnaire : {rename_dict}")
+    
+    return df
 
 
 
