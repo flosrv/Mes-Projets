@@ -3,3 +3,4 @@
 
 # Ignore all folders that contain .parquet files
 **/*.parquet
+*.xml
