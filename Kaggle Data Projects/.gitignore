@@ -1,6 +1,80 @@
-# Ignore all .parquet files
-*.parquet
+# === Python ===
+__pycache__/
+*.py[cod]
+*.ipynb_checkpoints
+*.pyo
+*.pyd
+*.so
 
-# Ignore all folders that contain .parquet files
-**/*.parquet
+# === Virtual Environments ===
+env/
+venv/
+.venv/
+ENV/
+
+# === Jupyter Notebook metadata ===
+.ipynb_checkpoints/
+
+# === OS Files ===
+.DS_Store
+Thumbs.db
+
+# === IDEs ===
+.vscode/
+.idea/
+
+# === Data Files ===
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.json
 *.xml
+*.parquet
+*.feather
+*.orc
+*.h5
+*.db
+*.sqlite
+
+# === Zipped / Compressed Files ===
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# === Model Files ===
+*.pkl
+*.joblib
+*.h5
+*.sav
+*.pt
+*.pth
+*.onnx
+
+# === Logs & Outputs ===
+*.log
+*.out
+*.bak
+
+# === Results ===
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+*.gif
+
+# === Large datasets folders ===
+datasets/
+data/
+downloaded_datasets/
+outputs/
+checkpoints/
+models/
+
+# === Git LFS ===
+.gitattributes
+
+# === Colab / Notebook Specific ===
+*.nbconvert.ipynb
